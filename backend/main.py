@@ -62,7 +62,7 @@ FEW-SHOT EXAMPLES:
   → "Love the energy! Go crush that workout! 💪"
 """
 
-model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
 
 class ChatMessage(BaseModel):
     role: str
@@ -80,7 +80,7 @@ class ChatResponse(BaseModel):
 @track(
     name="flexifit_negotiation",
     tags=["wellness", "behavior-science", "bj-fogg"],
-    metadata={"model": "gemini-1.5-flash", "methodology": "tiny-habits"}
+    metadata={"model": "gemini-2.0-flash-exp", "methodology": "tiny-habits"}
 )
 def call_gemini_negotiator(user_msg: str, goal: str, history: List):
     # Combine system instruction with context
