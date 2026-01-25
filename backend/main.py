@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from typing import List
 import google.generativeai as genai
 from dotenv import load_dotenv
-from opik import track
+from opik import configure, track
 
 load_dotenv()
 
-# Initialize Opik for observability
+# Configure Opik for observability
+configure()
 os.environ.setdefault("OPIK_PROJECT_NAME", "flexifit-hackathon")
 
 app = FastAPI(title="FlexiFit Backend", version="1.0.0")
@@ -49,6 +50,9 @@ PROTOCOL (THE "NEGOTIATION LOOP"):
    - If MOTIVATED: Cheer them on for full goal
 4. **Tone Check**: Casual, warm, concise (Max 2-3 sentences)
 
+STREAK PROTECTION:
+If user repeatedly uses excuses, gently remind: "Consistency beats intensity. Even 1% effort keeps the neural pathway alive! 🧠"
+
 FEW-SHOT EXAMPLES:
 - Goal: "Run 5km" | User: "I'm exhausted" 
   → "Totally get it. Rest matters. How about just walk 5 minutes to keep streak alive?"
@@ -72,16 +76,20 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
 
-# AI wrapper function with Opik tracking
-@track(name="gemini_negotiation")
+# AI wrapper function with enhanced Opik tracking
+@track(
+    name="flexifit_negotiation",
+    tags=["wellness", "behavior-science", "bj-fogg"],
+    metadata={"model": "gemini-1.5-flash", "methodology": "tiny-habits"}
+)
 def call_gemini_negotiator(user_msg: str, goal: str, history: List):
     # Combine system instruction with context
     full_prompt = f"{SYSTEM_INSTRUCTION}\n\nCONTEXT [User's Main Goal: {goal}]\nUSER SAYS: {user_msg}\n(Apply negotiation protocol based on user's energy/motivation level)"
 
-    # Format history for Gemini
+    # Format history for Gemini model
     history_formatted = [
         {"role": msg.role, "parts": [msg.text]} 
-        for msg in history[-10:]  # Keep last 10 messages
+        for msg in history[-9:]
     ]
 
     chat_session = model.start_chat(history=history_formatted)
@@ -91,12 +99,21 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List):
 
 @app.get("/")
 async def root():
-    return {"message": "FlexiFit Backend is running!", "status": "healthy"}
+    return {
+        "message": "FlexiFit Backend is running!", 
+        "status": "healthy",
+        "version": "1.0.0",
+        "methodology": "BJ Fogg Tiny Habits"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "opik": "configured"}
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
-        # Call AI with Opik tracking
+        # Call AI with enhanced Opik tracking
         ai_reply = call_gemini_negotiator(
             user_msg=request.user_message,
             goal=request.current_goal,

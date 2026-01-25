@@ -16,7 +16,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Backend will run at `http://localhost:8000`
+Backend will run at `http://localhost:8000` or `http://localhost:8001`
 
 ### 2. Frontend Setup
 ```bash
@@ -77,7 +77,7 @@ flutter build apk --release
 ✅ **Opik Integration**: Full observability for demo to judges
 ✅ **Smart Demo UI**: Quick reply buttons for consistent demo experience
 
-## 💡 Key Innovation
+## Key Innovation
 
 **Context Injection Technique**: Every user message is wrapped with goal context, making AI appear "smart" without needing complex database server.
 

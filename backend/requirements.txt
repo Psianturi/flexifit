@@ -4,3 +4,4 @@ google-generativeai==0.3.2
 pydantic==2.5.0
 python-dotenv==1.0.0
 opik==0.2.0
+google-genai==0.3.0
