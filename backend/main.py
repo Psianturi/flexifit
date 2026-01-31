@@ -6,9 +6,22 @@ from pydantic import BaseModel
 from typing import List, Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
-from opik import configure, track
-from opik.context import get_current_session
 import logging
+
+try:
+    from opik import configure, track
+    OPIK_AVAILABLE = True
+except Exception:
+    OPIK_AVAILABLE = False
+
+    def configure(*args, **kwargs):
+        return None
+
+    def track(*args, **kwargs):
+        def _decorator(fn):
+            return fn
+
+        return _decorator
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -17,11 +30,16 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configure Opik for observability
-try:
-    configure(project_name="flexifit-hackathon")
-    logger.info("✓ Opik configured successfully")
-except Exception as e:
-    logger.warning(f"⚠ Opik not fully configured: {e}. Continuing without observability.")
+OPIK_ENABLED = False
+if OPIK_AVAILABLE:
+    try:
+        configure(project_name="flexifit-hackathon")
+        OPIK_ENABLED = True
+        logger.info("✓ Opik configured successfully")
+    except Exception as e:
+        logger.warning(f"⚠ Opik not fully configured: {e}. Continuing without observability.")
+else:
+    logger.warning("⚠ Opik SDK not available. Continuing without observability.")
 
 app = FastAPI(title="FlexiFit Backend", version="1.0.0")
 
@@ -141,16 +159,7 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
             full_prompt,
             request_options={"timeout": 10}
         )
-        
-        # Log metadata to Opik
-        opik_session = get_current_session()
-        if opik_session:
-            opik_session.log(
-                input={"user_message": user_msg, "goal": goal, "history_length": len(history)},
-                output={"response": response.text},
-                metadata={"response_length": len(response.text)}
-            )
-        
+
         return response.text
 
     except TimeoutError:
@@ -179,14 +188,14 @@ async def root():
         "status": "healthy",
         "version": "1.0.0",
         "methodology": "BJ Fogg Tiny Habits",
-        "observability": "Opik Enabled"
+        "observability": "Opik Enabled" if OPIK_ENABLED else "Opik Disabled"
     }
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "opik": "configured",
+        "opik": "configured" if OPIK_ENABLED else "disabled",
         "gemini": "ready"
     }
 
