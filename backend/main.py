@@ -21,7 +21,7 @@ except Exception:
     def configure(*args, **kwargs):
         return None
 
-    def track(*args, **kwargs):
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         def _decorator(fn):
             return fn
 
@@ -127,9 +127,8 @@ FEW-SHOT EXAMPLES:
   → "Love the energy! Go crush that workout! 💪"
 """
 
-# Default to a widely-supported model name for google-generativeai (v1beta).
-# Can be overridden via GEMINI_MODEL on Railway.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 model = genai.GenerativeModel(
     model_name=GEMINI_MODEL,
     system_instruction=SYSTEM_INSTRUCTION,
