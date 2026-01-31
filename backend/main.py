@@ -5,6 +5,7 @@ import inspect
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Request
 from pydantic import BaseModel
 from typing import List, Optional
 import google.generativeai as genai
@@ -90,6 +91,22 @@ else:
     logger.warning("⚠ Opik SDK not available. Continuing without observability.")
 
 app = FastAPI(title="FlexiFit Backend", version="1.0.0")
+
+
+@app.middleware("http")
+async def _opik_flush_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if OPIK_ENABLED and OPIK_AVAILABLE:
+        try:
+            import opik as _opik
+
+            flush_fn = getattr(_opik, "flush", None)
+            if callable(flush_fn):
+                flush_fn()
+        except Exception:
+            # Never fail requests due to observability.
+            pass
+    return response
 
 # CORS Configuration: Tighten in production
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
