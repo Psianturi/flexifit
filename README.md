@@ -9,14 +9,16 @@ An AI application that helps maintain healthy habit streaks through smart negoti
 cd backend
 pip install -r requirements.txt
 
-# Edit .env file and add API keys:
-# GOOGLE_API_KEY=your_gemini_api_key_here
-# OPIK_API_KEY=your_opik_api_key_here (register at comet.com/opik)
+# copy and fill your keys
+copy .env.example .env
 
-python main.py
+# run (Windows/macOS/Linux)
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Backend will run at `http://localhost:8000` or `http://localhost:8001`
+Backend will run at `http://localhost:8000`.
+
+More details: see [backend/README.md](backend/README.md).
 
 ### 2. Frontend Setup
 ```bash
@@ -25,10 +27,14 @@ flutter pub get
 flutter run
 ```
 
-**IMPORTANT**: Update `baseUrl` in `lib/api_service.dart`:
-- Android Emulator: `http://10.0.2.2:8000`
-- iOS Simulator: `http://localhost:8000`
-- Physical Device: `http://[LAPTOP_IP]:8000`
+By default, the app targets the Railway backend:
+- https://flexifit-production.up.railway.app
+
+For local dev, run Flutter with:
+- `flutter run --dart-define=USE_LOCAL_API=true`
+
+Or explicitly set any backend URL:
+- `flutter run --dart-define=API_BASE_URL=https://flexifit-production.up.railway.app`
 
 ##  Testing Scenarios
 
@@ -60,8 +66,10 @@ flutter run
 
 ### Backend → Railway
 1. Push to GitHub
-2. Connect Railway → Auto deploy
-3. Update Flutter `baseUrl` with Railway URL
+2. Connect Railway → Deploy from GitHub
+3. Set Railway Variables (`GOOGLE_API_KEY`, `OPIK_API_KEY`)
+4. Deploy using the monorepo Dockerfile setup (details in [backend/README.md](backend/README.md))
+5. Update Flutter `baseUrl` with the Railway public URL
 
 ### Frontend → APK
 ```bash
@@ -84,5 +92,3 @@ flutter build apk --release
 ```python
 context_prompt = f"USER'S GOAL: {goal}\nUSER SAYS: {message}"
 ```
-
-This is the secret sauce that makes FlexiFit unique!

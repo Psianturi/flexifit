@@ -1,4 +1,6 @@
 import os
+import json
+import re
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,11 +35,21 @@ load_dotenv()
 OPIK_ENABLED = False
 if OPIK_AVAILABLE:
     try:
-        configure(project_name="flexifit-hackathon")
+        opik_api_key = os.getenv("OPIK_API_KEY")
+        opik_workspace = os.getenv("OPIK_WORKSPACE", "flexifit-hackathon")
+        opik_url = os.getenv("OPIK_URL")
+
+        if not opik_api_key:
+            raise ValueError("OPIK_API_KEY not set")
+
+        # opik.configure signature (as of opik 0.2.x): api_key/workspace/url
+        configure(api_key=opik_api_key, workspace=opik_workspace, url=opik_url)
         OPIK_ENABLED = True
         logger.info("✓ Opik configured successfully")
     except Exception as e:
-        logger.warning(f"⚠ Opik not fully configured: {e}. Continuing without observability.")
+        logger.warning(
+            f"⚠ Opik not fully configured: {e}. Continuing without observability."
+        )
 else:
     logger.warning("⚠ Opik SDK not available. Continuing without observability.")
 
@@ -181,6 +193,73 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
             detail=f"AI processing failed: {str(e)[:100]}"
         )
 
+
+def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:
+    patterns = [
+        r"\bhow about\b",
+        r"\blet'?s\b",
+        r"\bcommit\b",
+        r"\bjust\b",
+        r"\b2\s*-?\s*minute\b",
+        r"\b5\s*-?\s*minute\b",
+        r"\bmicro\s*-?\s*habit\b",
+        r"\btiny\b",
+    ]
+
+    count = 0
+    for msg in history:
+        if msg.role not in {"model", "assistant"}:
+            continue
+        text = (msg.text or "").lower()
+        if any(re.search(p, text) for p in patterns):
+            count += 1
+    return count
+
+
+@track(
+    name="flexifit_progress",
+    tags=["progress", "wellness", "behavior-science"],
+    metadata={
+        "model": "gemini-2.0-flash-exp",
+        "feature": "progress-insights",
+    },
+)
+def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict:
+    """Generate a short progress summary from recent chat history.
+
+    Returns a dict with:
+    - insights: short string (max ~3 bullets)
+    - micro_habits_offered: int estimate
+    """
+    transcript = "\n".join(
+        [f"{m.role.upper()}: {m.text}" for m in history[-20:]]
+    )
+
+    prompt = (
+        "You analyze a user's habit-coaching chat history and summarize progress. "
+        "Return STRICT JSON only (no markdown).\n"
+        "Keys: insights (string), micro_habits_offered (integer).\n"
+        "Rules: insights must be concise, max 3 bullet points, and include one next micro-habit suggestion.\n\n"
+        f"GOAL: {goal}\n\n"
+        f"CHAT_HISTORY:\n{transcript}\n"
+    )
+
+    response = model.generate_content(
+        prompt,
+        request_options={"timeout": 10},
+    )
+
+    raw = (response.text or "").strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        raw = raw[start : end + 1]
+
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("Progress insights must be a JSON object")
+    return payload
+
 @app.get("/")
 async def root():
     return {
@@ -237,22 +316,40 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
         if not request.current_goal.strip():
             raise HTTPException(status_code=400, detail="Goal must be set")
 
-        # Simple calculation: count messages, estimate completion
-        total_chats = len(request.chat_history) + 1
-        
-        # Heuristic: if more messages = user is engaging
-        completion_rate = min(100, (total_chats / 10) * 100)
-        
-        # Placeholder for AI-generated insights
-        insights = "Keep up the negotiation! Your streak is important. 💪"
+        history = request.chat_history
+        total_chats = len(history)
+
+        micro_habits_heuristic = _estimate_micro_habits_offered(history)
+
+        insights = None
+        micro_habits_from_ai: Optional[int] = None
+        try:
+            ai_payload = call_gemini_progress_insights(request.current_goal, history)
+            insights = ai_payload.get("insights")
+            mh = ai_payload.get("micro_habits_offered")
+            if isinstance(mh, (int, float)):
+                micro_habits_from_ai = int(mh)
+        except Exception as e:
+            logger.warning(f"⚠ Progress insights fallback (Gemini unavailable): {e}")
+
+        micro_habits_offered = max(
+            micro_habits_heuristic,
+            micro_habits_from_ai or 0,
+        )
+
+       # Calculate completion rate (capped at 100%)
+        completion_rate = float(min(100.0, (min(total_chats, 10) / 10.0) * 100.0))
+
+        if not insights or not str(insights).strip():
+            insights = "- Keep the habit tiny today.\n- Pick one micro-step and do it now.\n- Consistency beats intensity."
 
         progress_data = ProgressData(
             goal=request.current_goal,
             total_chats=total_chats,
-            micro_habits_offered=max(1, total_chats // 3),
+            micro_habits_offered=micro_habits_offered,
             completion_rate=completion_rate,
-            last_interaction="Just now",
-            insights=insights
+            last_interaction="recent",
+            insights=str(insights),
         )
 
         return ProgressResponse(status="success", data=progress_data)
