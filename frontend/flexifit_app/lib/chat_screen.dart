@@ -40,6 +40,7 @@ class ChatScreenState extends State<ChatScreen> {
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechReady = false;
+  String? _speechLocaleId;
 
   late final ConfettiController _confettiController;
 
@@ -105,7 +106,7 @@ class ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    loaded.sort((a, b) => a.createdAt!.compareTo(b.createdAt!));
+    loaded.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     if (!mounted) return;
     setState(() {
@@ -187,6 +188,22 @@ class ChatScreenState extends State<ChatScreen> {
   Future<void> showVoiceSheet() async {
     if (!_speechReady) {
       _speechReady = await _speech.initialize();
+
+      if (_speechReady) {
+        try {
+          final locales = await _speech.locales();
+          if (locales.any((l) => l.localeId == 'en_US')) {
+            _speechLocaleId = 'en_US';
+          } else if (locales.any((l) => l.localeId == 'id_ID')) {
+            _speechLocaleId = 'id_ID';
+          } else if (locales.isNotEmpty) {
+            _speechLocaleId = locales.first.localeId;
+          }
+        } catch (_) {
+          // If locale discovery fails, fall back to platform default.
+          _speechLocaleId = null;
+        }
+      }
     }
 
     if (!_speechReady) {
@@ -222,7 +239,10 @@ class ChatScreenState extends State<ChatScreen> {
 
               setModalState(() => isListening = true);
               await _speech.listen(
-                partialResults: true,
+                localeId: _speechLocaleId,
+                listenOptions: stt.SpeechListenOptions(
+                  partialResults: true,
+                ),
                 onResult: (result) {
                   setModalState(() {
                     recognized = result.recognizedWords;
@@ -335,7 +355,7 @@ class ChatScreenState extends State<ChatScreen> {
       return {
         'role': m.user.id == '1' ? 'user' : 'model',
         'text': m.text,
-        'createdAt': m.createdAt?.toIso8601String(),
+        'createdAt': m.createdAt.toIso8601String(),
       };
     }).toList();
 
@@ -517,6 +537,17 @@ class ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            'FlexiFit is an AI coach, not medical advice. For health concerns, consult a professional.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 12,
+            ),
+          ),
+        ),
         Expanded(
           child: Column(
             children: [
@@ -668,7 +699,20 @@ class ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("FlexiFit Agent"),
+        title: const Text("FlexiFit"),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(28),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'AI coach only — not medical advice.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),

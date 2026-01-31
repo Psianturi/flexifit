@@ -107,10 +107,11 @@ class ProgressScreenState extends State<ProgressScreen> {
         _weeklyMotivation = null;
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _syncing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _syncing = false;
+        });
+      }
     }
   }
 

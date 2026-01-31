@@ -109,11 +109,15 @@ async def _opik_flush_middleware(request: Request, call_next):
     return response
 
 # CORS Configuration: Tighten in production
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
+raw_cors_origins = os.getenv("CORS_ORIGINS", "*")
+CORS_ORIGINS = [o.strip() for o in raw_cors_origins.split(",") if o.strip()]
+_cors_has_wildcard = "*" in CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"] if _cors_has_wildcard else CORS_ORIGINS,
+    allow_credentials=False if _cors_has_wildcard else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -215,6 +219,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    empathy_score: Optional[float] = None
+    empathy_rationale: Optional[str] = None
 
 class ProgressData(BaseModel):
     goal: str
@@ -316,6 +322,57 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
     except Exception as e:
         logger.exception("Unexpected error in Gemini call")
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)[:160]}")
+
+
+@track(
+    name="flexifit_eval_empathy",
+    tags=["eval", "llm-as-judge", "empathy"],
+    metadata={
+        "model": GEMINI_MODEL,
+        "metric": "empathy_score",
+        "scale": "0_or_1",
+    },
+)
+def call_gemini_empathy_judge(user_text: str, ai_text: str) -> dict:
+    """Return a strict JSON dict: { empathy: 0|1, rationale: string }."""
+    prompt = (
+        "You are an evaluator for a habit-coaching AI. "
+        "Score the AI reply for EMPATHY + MICRO-HABIT behavior. "
+        "Return STRICT JSON only (no markdown).\n"
+        "Schema: {\"empathy\": 0|1, \"rationale\": \"...\"}.\n"
+        "Scoring:\n"
+        "- empathy=1 if the reply acknowledges/validates the user's feelings AND suggests a tiny, doable micro-habit.\n"
+        "- empathy=0 otherwise.\n\n"
+        f"USER: {user_text}\n"
+        f"AI: {ai_text}\n"
+    )
+
+    response = model.generate_content(
+        prompt,
+        request_options={"timeout": 10},
+    )
+
+    raw = (response.text or "").strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        raw = raw[start : end + 1]
+
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("Empathy evaluation must be a JSON object")
+
+    empathy = payload.get("empathy")
+    if isinstance(empathy, bool):
+        empathy = 1 if empathy else 0
+    if not isinstance(empathy, (int, float)):
+        raise ValueError("Empathy must be 0 or 1")
+
+    empathy = 1 if float(empathy) >= 0.5 else 0
+    rationale = payload.get("rationale")
+    rationale_text = str(rationale).strip() if rationale is not None else ""
+
+    return {"empathy": empathy, "rationale": rationale_text}
 
 
 def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:
@@ -445,6 +502,10 @@ async def health_check():
         "gemini": "ready",
         "gemini_model": GEMINI_MODEL,
         "opik_project": os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon"),
+        "evals": {
+            "empathy_score": "enabled",
+            "type": "llm-as-judge",
+        },
     }
 
 @app.post("/chat", response_model=ChatResponse)
@@ -463,9 +524,22 @@ async def chat_endpoint(request: ChatRequest):
             goal=request.current_goal,
             history=request.chat_history
         )
+
+        empathy_score: Optional[float] = None
+        empathy_rationale: Optional[str] = None
+        try:
+            judged = call_gemini_empathy_judge(request.user_message, ai_reply)
+            empathy_score = float(judged.get("empathy"))
+            empathy_rationale = str(judged.get("rationale") or "").strip() or None
+        except Exception as e:
+            logger.warning(f"⚠ Empathy eval skipped: {e}")
         
         logger.info(f"✓ Chat processed | Goal: {request.current_goal} | Reply length: {len(ai_reply)}")
-        return ChatResponse(response=ai_reply)
+        return ChatResponse(
+            response=ai_reply,
+            empathy_score=empathy_score,
+            empathy_rationale=empathy_rationale,
+        )
 
     except HTTPException:
         raise
