@@ -228,6 +228,26 @@ class ProgressResponse(BaseModel):
     status: str
     data: ProgressData
 
+
+class DayCompletion(BaseModel):
+    date: str
+    done: bool
+
+
+class WeeklyMotivationRequest(BaseModel):
+    goal: str
+    completion_rate_7d: float
+    last7_days: List[DayCompletion]
+
+
+class WeeklyMotivationData(BaseModel):
+    motivation: str
+
+
+class WeeklyMotivationResponse(BaseModel):
+    status: str
+    data: WeeklyMotivationData
+
 # AI wrapper function with enhanced Opik tracking
 @track(
     name="flexifit_negotiation",
@@ -364,6 +384,48 @@ def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict
         raise ValueError("Progress insights must be a JSON object")
     return payload
 
+
+@track(
+    name="flexifit_weekly_motivation",
+    tags=["progress", "motivation", "weekly"],
+    metadata={
+        "model": GEMINI_MODEL,
+        "feature": "weekly-motivation",
+    },
+)
+def call_gemini_weekly_motivation(
+    goal: str, completion_rate_7d: float, last7_days: List[DayCompletion]
+) -> str:
+    done_days = sum(1 for d in last7_days if bool(d.done))
+    total_days = max(1, len(last7_days))
+
+    days_compact = ", ".join(
+        [f"{d.date}:{'done' if d.done else 'miss'}" for d in last7_days]
+    )
+
+    prompt = (
+        "You are a tough-but-supportive fitness coach. "
+        "Return ONLY ONE sentence in Indonesian (no markdown, no bullet points). "
+        "Keep it short (max 20 words), direct, and motivating.\n\n"
+        f"GOAL: {goal}\n"
+        f"WEEKLY_COMPLETION_RATE: {completion_rate_7d:.0f}%\n"
+        f"LAST_7_DAYS: {days_compact}\n"
+        f"DONE_DAYS: {done_days}/{total_days}\n"
+    )
+
+    response = model.generate_content(
+        prompt,
+        request_options={"timeout": 10},
+    )
+
+    text = (response.text or "").strip()
+    # Keep it a single line/sentence.
+    text = re.sub(r"\s+", " ", text)
+    text = text.strip().strip("\"").strip()
+    if not text:
+        raise ValueError("Empty weekly motivation")
+    return text
+
 @app.get("/")
 async def root():
     return {
@@ -466,6 +528,39 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
     except Exception as e:
         logger.error(f"🔥 Error in /progress: {str(e)}")
         raise HTTPException(status_code=500, detail="Progress calculation failed")
+
+
+@app.post("/progress/motivation", response_model=WeeklyMotivationResponse)
+async def weekly_motivation_endpoint(
+    request: WeeklyMotivationRequest,
+) -> WeeklyMotivationResponse:
+    try:
+        if not request.goal.strip():
+            raise HTTPException(status_code=400, detail="Goal must be set")
+
+        # Clamp to sane range to avoid prompt injection via absurd numbers.
+        rate = float(max(0.0, min(100.0, request.completion_rate_7d)))
+
+        motivation = call_gemini_weekly_motivation(
+            goal=request.goal,
+            completion_rate_7d=rate,
+            last7_days=request.last7_days,
+        )
+
+        # Fallback if model returns something unexpected.
+        if not motivation or not str(motivation).strip():
+            motivation = "Tetap jalan hari ini—konsistensi kecil mengalahkan niat besar."
+
+        return WeeklyMotivationResponse(
+            status="success",
+            data=WeeklyMotivationData(motivation=str(motivation).strip()),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"🔥 Error in /progress/motivation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Motivation generation failed")
 
 
 if __name__ == "__main__":

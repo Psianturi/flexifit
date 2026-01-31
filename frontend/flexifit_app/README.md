@@ -1,16 +1,54 @@
-# flexyfit_app
+# FlexiFit Flutter App
 
-A new Flutter project.
+Flutter client for FlexiFit (AI Wellness Negotiator).
 
-## Getting Started
+## Prerequisites
+- Flutter SDK installed (`flutter doctor` should be clean)
+- A backend URL (local or deployed)
 
-This project is a starting point for a Flutter application.
+## Install deps
+```bash
+flutter pub get
+```
 
-A few resources to get you started if this is your first Flutter project:
+## Run (Web)
+```bash
+flutter devices
+flutter run -d chrome
+# or
+flutter run -d edge
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Run (Android physical device / emulator)
+1) List devices:
+```bash
+flutter devices
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+2) Run using a device id:
+```bash
+flutter run -d <device-id>
+```
+
+### Start an emulator (optional)
+```bash
+flutter emulators
+flutter emulators --launch <emulator-id>
+flutter devices
+flutter run -d <device-id>
+```
+
+## Configure backend (no hardcoded URL)
+Pass the backend base URL at runtime:
+```bash
+# Local
+flutter run -d <device-id> --dart-define=API_BASE_URL=http://localhost:8000
+
+# Deployed
+flutter run -d <device-id> --dart-define=API_BASE_URL=<your-backend-url>
+```
+
+If your build supports it, you can also toggle local mode:
+```bash
+flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
+```

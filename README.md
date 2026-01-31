@@ -24,17 +24,43 @@ More details: see [backend/README.md](backend/README.md).
 ```bash
 cd frontend/flexifit_app
 flutter pub get
-flutter run
 ```
 
-By default, the app targets the Railway backend:
-- https://flexifit-production.up.railway.app
+#### Run on Browser (Chrome / Edge)
+```bash
+flutter devices
+flutter run -d chrome
+# or
+flutter run -d edge
+```
 
-For local dev, run Flutter with:
-- `flutter run --dart-define=USE_LOCAL_API=true`
+#### Run on Physical Device / Emulator
+```bash
+flutter devices
+flutter run -d <device-id>
+```
 
-Or explicitly set any backend URL:
-- `flutter run --dart-define=API_BASE_URL=https://flexifit-production.up.railway.app`
+If you want to use an Android emulator:
+```bash
+flutter emulators
+flutter emulators --launch <emulator-id>
+flutter run -d <device-id>
+```
+
+#### API Base URL (no hardcoded URL)
+Set the backend URL at runtime using `--dart-define`:
+```bash
+# Local backend
+flutter run -d <device-id> --dart-define=API_BASE_URL=http://localhost:8000
+
+# Deployed backend
+flutter run -d <device-id> --dart-define=API_BASE_URL=<your-backend-url>
+```
+
+If you prefer a boolean flag for local dev (if supported in your build):
+```bash
+flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
+```
 
 ##  Testing Scenarios
 

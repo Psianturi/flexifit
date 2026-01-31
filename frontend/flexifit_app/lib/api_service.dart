@@ -14,6 +14,12 @@ class ProgressInsights {
   });
 }
 
+class WeeklyMotivationResult {
+  final String motivation;
+
+  const WeeklyMotivationResult({required this.motivation});
+}
+
 class ApiService {
   static String get baseUrl {
     return AppConfig.apiBaseUrl;
@@ -112,5 +118,41 @@ class ApiService {
       insights: insights,
       microHabitsOffered: microHabitsOffered,
     );
+  }
+
+  static Future<WeeklyMotivationResult> getWeeklyMotivation({
+    required String goal,
+    required double completionRate7d,
+    required List<Map<String, dynamic>> last7Days,
+  }) async {
+    final url = Uri.parse('$baseUrl/progress/motivation');
+
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'goal': goal,
+            'completion_rate_7d': completionRate7d,
+            'last7_days': last7Days
+                .map((d) => {
+                      'date': d['date'],
+                      'done': d['done'] == true,
+                    })
+                .toList(),
+          }),
+        )
+        .timeout(const Duration(seconds: 12));
+
+    if (response.statusCode != 200) {
+      throw Exception('Server error: ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded['data'] : null;
+    final motivation =
+        (data is Map ? data['motivation']?.toString() : null) ?? '';
+
+    return WeeklyMotivationResult(motivation: motivation);
   }
 }

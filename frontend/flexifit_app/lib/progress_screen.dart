@@ -19,6 +19,7 @@ class ProgressScreenState extends State<ProgressScreen> {
 
   bool _syncing = false;
   String? _aiInsights;
+  String? _weeklyMotivation;
   int? _microHabitsOffered;
   DateTime? _lastSyncedAt;
 
@@ -67,6 +68,11 @@ class ProgressScreenState extends State<ProgressScreen> {
 
     try {
       final goal = _goal ?? 'Stay Healthy';
+
+      final completions = await ProgressStore.getCompletions();
+      final trend7d = ProgressStore.last7DaysTrend(completions);
+      final rate7d = ProgressStore.completionRate7d(completions);
+
       final history = (await ProgressStore.getChatHistory())
           .map((m) => {
                 'role': m['role'],
@@ -79,9 +85,18 @@ class ProgressScreenState extends State<ProgressScreen> {
         history: history,
       );
 
+      final motivationResult = await ApiService.getWeeklyMotivation(
+        goal: goal,
+        completionRate7d: rate7d,
+        last7Days: trend7d,
+      );
+
       if (!mounted) return;
       setState(() {
         _aiInsights = result.insights;
+        _weeklyMotivation = motivationResult.motivation.trim().isEmpty
+            ? null
+            : motivationResult.motivation.trim();
         _microHabitsOffered = result.microHabitsOffered;
         _lastSyncedAt = DateTime.now();
       });
@@ -89,6 +104,7 @@ class ProgressScreenState extends State<ProgressScreen> {
       if (!mounted) return;
       setState(() {
         _aiInsights = "Couldn't sync right now. Try again.";
+        _weeklyMotivation = null;
       });
     } finally {
       if (!mounted) return;
@@ -163,7 +179,7 @@ class ProgressScreenState extends State<ProgressScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  title: '7-day Rate',
+                  title: 'Weekly Consistency',
                   value: '${_completionRate7d.toStringAsFixed(0)}%',
                   icon: Icons.show_chart,
                 ),
@@ -202,6 +218,35 @@ class ProgressScreenState extends State<ProgressScreen> {
                       ),
                     ],
                   ),
+                  if (_weeklyMotivation != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.teal.shade100),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.fitness_center,
+                              color: Colors.teal.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _weeklyMotivation!,
+                              style: TextStyle(
+                                color: Colors.teal.shade900,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (_lastSyncedAt != null) ...[
                     const SizedBox(height: 6),
                     Text(
