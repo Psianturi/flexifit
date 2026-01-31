@@ -3,6 +3,7 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:async';
+import 'package:confetti/confetti.dart';
 import 'api_service.dart';
 import 'progress_store.dart';
 
@@ -40,12 +41,30 @@ class ChatScreenState extends State<ChatScreen> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechReady = false;
 
+  late final ConfettiController _confettiController;
+
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(
+      duration: const Duration(milliseconds: 900),
+    );
     _loadGoal();
     _loadProgress();
     _loadChatHistory();
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    _loadingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _playConfetti() {
+    // Avoid overlapping animations.
+    _confettiController.stop();
+    _confettiController.play();
   }
 
   Future<void> _loadProgress() async {
@@ -359,6 +378,7 @@ class ChatScreenState extends State<ChatScreen> {
     // Check for DEAL_MADE tag
     if (responseText.contains('[DEAL_MADE]')) {
       String cleanResponse = responseText.replaceAll('[DEAL_MADE]', '').trim();
+      _playConfetti();
       _extractAndShowDeal(cleanResponse);
       _addBotMessage(cleanResponse);
     } else {
@@ -411,6 +431,8 @@ class ChatScreenState extends State<ChatScreen> {
     await ProgressStore.markDoneToday();
     await _loadProgress();
     widget.onProgressChanged?.call();
+
+    _playConfetti();
 
     // Add celebration message
     _addBotMessage(
@@ -603,8 +625,45 @@ class ChatScreenState extends State<ChatScreen> {
       ],
     );
 
+    final withConfetti = Stack(
+      children: [
+        content,
+        Align(
+          alignment: Alignment.topCenter,
+          child: IgnorePointer(
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              emissionFrequency: 0.06,
+              numberOfParticles: 18,
+              maxBlastForce: 22,
+              minBlastForce: 10,
+              gravity: 0.25,
+              colors: const [
+                Color(0xFF00BFA5),
+                Color(0xFF1DE9B6),
+                Color(0xFFFFD54F),
+                Color(0xFFFF8A65),
+                Color(0xFF81C784),
+              ],
+              createParticlePath: (size) {
+                // Simple diamond particle.
+                final path = Path();
+                path.moveTo(size.width / 2, 0);
+                path.lineTo(size.width, size.height / 2);
+                path.lineTo(size.width / 2, size.height);
+                path.lineTo(0, size.height / 2);
+                path.close();
+                return path;
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+
     if (widget.embedded) {
-      return content;
+      return withConfetti;
     }
 
     return Scaffold(
@@ -618,7 +677,7 @@ class ChatScreenState extends State<ChatScreen> {
           )
         ],
       ),
-      body: content,
+      body: withConfetti,
     );
   }
 }
