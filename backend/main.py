@@ -127,7 +127,9 @@ FEW-SHOT EXAMPLES:
   → "Love the energy! Go crush that workout! 💪"
 """
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-002")
+# Default to a widely-supported model name for google-generativeai (v1beta).
+# Can be overridden via GEMINI_MODEL on Railway.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 model = genai.GenerativeModel(
     model_name=GEMINI_MODEL,
     system_instruction=SYSTEM_INSTRUCTION,
