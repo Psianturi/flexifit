@@ -10,7 +10,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
   final _chatKey = GlobalKey<ChatScreenState>();
@@ -54,6 +55,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               icon: const Icon(Icons.edit),
               tooltip: 'Change Goal',
               onPressed: () => _chatKey.currentState?.showGoalDialog(),
+            ),
+          if (isChatTab)
+            IconButton(
+              icon: const Icon(Icons.mic),
+              tooltip: 'Voice input',
+              onPressed: () => _chatKey.currentState?.showVoiceSheet(),
+            ),
+          if (isChatTab)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete conversation',
+              onPressed: () =>
+                  _chatKey.currentState?.confirmAndClearConversation(),
             ),
         ],
       ),

@@ -174,43 +174,57 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
     - Returns empathetic, adaptive micro-habit proposal
     - Opik automatically logs input/output + tracing
     """
+    def _history_to_transcript(items: List[ChatMessage]) -> str:
+        lines: List[str] = []
+        for msg in items[-12:]:
+            role = (msg.role or "").strip().lower()
+            text = (msg.text or "").strip()
+            if not text:
+                continue
+
+            if role in {"model", "assistant", "ai", "bot"}:
+                speaker = "FLEXIFIT"
+            elif role in {"user", "human"}:
+                speaker = "USER"
+            else:
+                continue
+
+            lines.append(f"{speaker}: {text}")
+        return "\n".join(lines)
+
     try:
+        transcript = _history_to_transcript(history)
         prompt = (
-            f"User's Main Goal: {goal}\n"
-            f"User says: {user_msg}\n"
-            "Follow the negotiation loop and propose the smallest possible next step."
+            "You are FlexiFit. Follow the NEGOTIATION LOOP strictly.\n"
+            "Return 2-3 short sentences max.\n\n"
+            f"GOAL: {goal}\n\n"
+            f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
+            f"NEW_MESSAGE (USER): {user_msg}\n"
         )
 
-        history_formatted = [
-            {"role": msg.role, "parts": [msg.text]} 
-            for msg in history[-9:]
-        ]
+        response = model.generate_content(
+            prompt,
+            request_options={"timeout": 20},
+        )
 
-        # Initialize chat session with timeout
-        chat_session = model.start_chat(history=history_formatted)
-        
-        response = chat_session.send_message(prompt, request_options={"timeout": 10})
+        text = (response.text or "").strip()
+        if not text:
+            raise ValueError("Empty AI response")
 
-        return response.text
+        return text
 
     except TimeoutError:
-        logger.error("⏱ Gemini API timeout")
-        raise HTTPException(
-            status_code=504,
-            detail="AI response timeout. Please try again."
-        )
+        logger.exception("Gemini API timeout")
+        raise HTTPException(status_code=504, detail="AI response timeout. Please try again.")
     except DeadlineExceeded:
-        logger.error("⏱ Gemini API deadline exceeded")
+        logger.exception("Gemini API deadline exceeded")
         raise HTTPException(status_code=504, detail="AI response timeout. Please try again.")
     except Unauthenticated:
-        logger.error("❌ Gemini authentication failed")
+        logger.exception("Gemini authentication failed")
         raise HTTPException(status_code=401, detail="AI authentication failed. Check API key.")
     except Exception as e:
-        logger.error(f"🔥 Unexpected error in Gemini call: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI processing failed: {str(e)[:100]}"
-        )
+        logger.exception("Unexpected error in Gemini call")
+        raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)[:160]}")
 
 
 def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:async';
 import 'api_service.dart';
 import 'progress_store.dart';
@@ -35,6 +36,9 @@ class ChatScreenState extends State<ChatScreen> {
   bool _showActionButtons = false;
   String _currentAgreedHabit = "";
   int _streakCount = 0;
+
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechReady = false;
 
   @override
   void initState() {
@@ -99,8 +103,188 @@ class ChatScreenState extends State<ChatScreen> {
     if (_userGoal == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => showGoalDialog());
     } else {
-      _addBotMessage("Hello! Your goal today: $_userGoal. How are you feeling? 😊");
+      _addBotMessage(
+          "Hello! Your goal today: $_userGoal. How are you feeling? 😊");
     }
+  }
+
+  void sendText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    final message = ChatMessage(
+      user: _currentUser,
+      createdAt: DateTime.now(),
+      text: trimmed,
+    );
+
+    _onSend(message);
+  }
+
+  Future<void> confirmAndClearConversation() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete conversation?'),
+        content:
+            const Text('This will remove your chat history on this device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    await _clearConversation();
+  }
+
+  Future<void> _clearConversation() async {
+    _stopLoadingAnimation();
+    if (!mounted) return;
+
+    setState(() {
+      _messages = [];
+      _isLoading = false;
+      _showActionButtons = false;
+      _currentAgreedHabit = '';
+    });
+
+    await ProgressStore.setChatHistory([]);
+
+    if (!mounted) return;
+    final goal = _userGoal;
+    if (goal != null && goal.trim().isNotEmpty) {
+      _addBotMessage("Hello! Your goal today: $goal. How are you feeling? 😊");
+    }
+  }
+
+  Future<void> showVoiceSheet() async {
+    if (!_speechReady) {
+      _speechReady = await _speech.initialize();
+    }
+
+    if (!_speechReady) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Speech recognition not available on this device.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        bool isListening = false;
+        String recognized = '';
+
+        Future<void> stop() async {
+          await _speech.stop();
+        }
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> toggle() async {
+              if (isListening) {
+                await stop();
+                setModalState(() => isListening = false);
+                return;
+              }
+
+              setModalState(() => isListening = true);
+              await _speech.listen(
+                partialResults: true,
+                onResult: (result) {
+                  setModalState(() {
+                    recognized = result.recognizedWords;
+                  });
+                },
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                top: 8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Voice input',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isListening
+                        ? 'Listening… speak now.'
+                        : 'Tap the mic, then tap Send.',
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.teal.shade200),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.teal.shade50,
+                    ),
+                    child: Text(
+                      recognized.isEmpty ? '(no speech yet)' : recognized,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      IconButton.filledTonal(
+                        onPressed: toggle,
+                        icon: Icon(isListening ? Icons.stop : Icons.mic),
+                        tooltip: isListening ? 'Stop' : 'Start',
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          await stop();
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: recognized.trim().isEmpty
+                            ? null
+                            : () async {
+                                await stop();
+                                if (!context.mounted) return;
+                                Navigator.pop(context);
+                                sendText(recognized);
+                              },
+                        child: const Text('Send'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _saveGoal(String goal) async {
@@ -108,16 +292,19 @@ class ChatScreenState extends State<ChatScreen> {
     setState(() {
       _userGoal = goal;
     });
-    _addBotMessage("Great! Your goal: \"$goal\". Tell me, how are you feeling right now?");
+    _addBotMessage(
+        "Great! Your goal: \"$goal\". Tell me, how are you feeling right now?");
   }
 
   void _addBotMessage(String text) {
     setState(() {
-      _messages.insert(0, ChatMessage(
-        user: _aiUser,
-        createdAt: DateTime.now(),
-        text: text,
-      ));
+      _messages.insert(
+          0,
+          ChatMessage(
+            user: _aiUser,
+            createdAt: DateTime.now(),
+            text: text,
+          ));
     });
 
     _persistChatHistory();
@@ -186,7 +373,7 @@ class ChatScreenState extends State<ChatScreen> {
       "Applying BJ Fogg methodology...",
       "Negotiating optimal plan..."
     ];
-    
+
     int index = 0;
     _loadingTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) {
       if (!_isLoading) {
@@ -224,9 +411,10 @@ class ChatScreenState extends State<ChatScreen> {
     await ProgressStore.markDoneToday();
     await _loadProgress();
     widget.onProgressChanged?.call();
-    
+
     // Add celebration message
-    _addBotMessage("🎉 Amazing! Streak updated: $_streakCount days! You're building unstoppable momentum! 🔥");
+    _addBotMessage(
+        "🎉 Amazing! Streak updated: $_streakCount days! You're building unstoppable momentum! 🔥");
   }
 
   void _stopLoadingAnimation() {
@@ -292,126 +480,128 @@ class ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final content = Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12.0),
-            color: Colors.teal.shade50,
-            child: Text(
-              "🎯 Today's Goal: ${_userGoal ?? 'Not set yet'} 🔥 $_streakCount",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.teal.shade900, 
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12.0),
+          color: Colors.teal.shade50,
+          child: Text(
+            "🎯 Today's Goal: ${_userGoal ?? 'Not set yet'} 🔥 $_streakCount",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.teal.shade900,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
-          Expanded(
-            child: Column(
-              children: [
-                // Quick Reply Buttons for Demo
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              // Quick Reply Buttons for Demo
+              Container(
+                padding: const EdgeInsets.all(8),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    _buildQuickReply("I'm really tired today 😴"),
+                    _buildQuickReply("Super busy, no time!"),
+                    _buildQuickReply("Ready for action! Let's go! 🔥"),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: DashChat(
+                  currentUser: _currentUser,
+                  onSend: _onSend,
+                  messages: _messages,
+                  typingUsers: _isLoading ? [_aiUser] : [],
+                  inputOptions: InputOptions(
+                    inputDecoration: const InputDecoration(
+                      hintText: "I'm tired... / Ready to go! / How do I start?",
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    inputTextStyle: const TextStyle(fontSize: 16),
+                  ),
+                  messageOptions: MessageOptions(
+                    showTime: true,
+                    messageDecorationBuilder:
+                        (message, previousMessage, nextMessage) {
+                      return BoxDecoration(
+                        color: message.user.id == '1'
+                            ? Colors.teal.shade100
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              // Micro-Contract Action Button
+              if (_showActionButtons)
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Wrap(
-                    spacing: 8,
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
                     children: [
-                      _buildQuickReply("I'm really tired today 😴"),
-                      _buildQuickReply("Super busy, no time!"),
-                      _buildQuickReply("Ready for action! Let's go! 🔥"),
+                      Icon(Icons.handshake, color: Colors.green.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _currentAgreedHabit,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade800,
+                          ),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text("DONE!"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: _markAsDone,
+                      ),
                     ],
                   ),
                 ),
-                Expanded(
-                  child: DashChat(
-                    currentUser: _currentUser,
-                    onSend: _onSend,
-                    messages: _messages,
-                    typingUsers: _isLoading ? [_aiUser] : [],
-                    inputOptions: InputOptions(
-                      inputDecoration: const InputDecoration(
-                        hintText: "I'm tired... / Ready to go! / How do I start?",
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              // Loading indicator with smart text
+              if (_isLoading)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      inputTextStyle: const TextStyle(fontSize: 16),
-                    ),
-                    messageOptions: MessageOptions(
-                      showTime: true,
-                      messageDecorationBuilder: (message, previousMessage, nextMessage) {
-                        return BoxDecoration(
-                          color: message.user.id == '1' 
-                              ? Colors.teal.shade100 
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        );
-                      },
-                    ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _loadingText,
+                        style: TextStyle(
+                          color: Colors.teal.shade600,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                // Micro-Contract Action Button
-                if (_showActionButtons)
-                  Container(
-                    margin: const EdgeInsets.all(8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.handshake, color: Colors.green.shade700),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _currentAgreedHabit,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade800,
-                            ),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.check_circle),
-                          label: const Text("DONE!"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _markAsDone,
-                        ),
-                      ],
-                    ),
-                  ),
-                // Loading indicator with smart text
-                if (_isLoading)
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _loadingText,
-                          style: TextStyle(
-                            color: Colors.teal.shade600,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
-        ],
-      );
+        ),
+      ],
+    );
 
     if (widget.embedded) {
       return content;

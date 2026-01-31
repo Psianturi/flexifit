@@ -26,6 +26,10 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>FlexiFit uses the microphone to let you speak your message to the AI coach.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>FlexiFit uses speech recognition to convert your voice into text for chatting with the AI coach.</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
