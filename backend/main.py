@@ -1,12 +1,14 @@
 import os
 import json
 import re
+import inspect
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import google.generativeai as genai
+from google.api_core.exceptions import DeadlineExceeded, Unauthenticated
 from dotenv import load_dotenv
 import logging
 
@@ -36,14 +38,32 @@ OPIK_ENABLED = False
 if OPIK_AVAILABLE:
     try:
         opik_api_key = os.getenv("OPIK_API_KEY")
-        opik_workspace = os.getenv("OPIK_WORKSPACE", "flexifit-hackathon")
+        opik_workspace = os.getenv("OPIK_WORKSPACE")
+        opik_project = os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon")
         opik_url = os.getenv("OPIK_URL")
 
         if not opik_api_key:
             raise ValueError("OPIK_API_KEY not set")
 
-        # opik.configure signature (as of opik 0.2.x): api_key/workspace/url
-        configure(api_key=opik_api_key, workspace=opik_workspace, url=opik_url)
+        # Hint project selection for SDKs that support env-based project routing.
+        os.environ.setdefault("OPIK_PROJECT_NAME", opik_project)
+        os.environ.setdefault("COMET_PROJECT_NAME", opik_project)
+
+        # Support both older and newer Opik SDKs by only passing supported kwargs.
+        sig = inspect.signature(configure)
+        kwargs = {}
+        if "api_key" in sig.parameters:
+            kwargs["api_key"] = opik_api_key
+        if "workspace" in sig.parameters and opik_workspace:
+            kwargs["workspace"] = opik_workspace
+        if "url" in sig.parameters and opik_url:
+            kwargs["url"] = opik_url
+        if "project_name" in sig.parameters:
+            kwargs["project_name"] = opik_project
+        elif "project" in sig.parameters:
+            kwargs["project"] = opik_project
+
+        configure(**kwargs)
         OPIK_ENABLED = True
         logger.info("✓ Opik configured successfully")
     except Exception as e:
@@ -107,7 +127,11 @@ FEW-SHOT EXAMPLES:
   → "Love the energy! Go crush that workout! 💪"
 """
 
-model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-002")
+model = genai.GenerativeModel(
+    model_name=GEMINI_MODEL,
+    system_instruction=SYSTEM_INSTRUCTION,
+)
 
 class ChatMessage(BaseModel):
     role: str
@@ -138,7 +162,7 @@ class ProgressResponse(BaseModel):
     name="flexifit_negotiation",
     tags=["wellness", "behavior-science", "bj-fogg"],
     metadata={
-        "model": "gemini-2.0-flash-exp",
+        "model": GEMINI_MODEL,
         "methodology": "tiny-habits",
         "feature": "negotiator-loop"
     }
@@ -151,12 +175,10 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
     - Opik automatically logs input/output + tracing
     """
     try:
-        # Combine system instruction with context
-        full_prompt = (
-            f"{SYSTEM_INSTRUCTION}\n\n"
-            f"CONTEXT [User's Main Goal: {goal}]\n"
-            f"USER SAYS: {user_msg}\n"
-            f"(Apply negotiation protocol based on user's energy/motivation level)"
+        prompt = (
+            f"User's Main Goal: {goal}\n"
+            f"User says: {user_msg}\n"
+            "Follow the negotiation loop and propose the smallest possible next step."
         )
 
         history_formatted = [
@@ -167,10 +189,7 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
         # Initialize chat session with timeout
         chat_session = model.start_chat(history=history_formatted)
         
-        response = chat_session.send_message(
-            full_prompt,
-            request_options={"timeout": 10}
-        )
+        response = chat_session.send_message(prompt, request_options={"timeout": 10})
 
         return response.text
 
@@ -180,12 +199,12 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
             status_code=504,
             detail="AI response timeout. Please try again."
         )
-    except google.generativeai.errors.InvalidAPIKeyError:
-        logger.error("❌ Invalid Google API key")
-        raise HTTPException(
-            status_code=401,
-            detail="AI authentication failed. Check API key."
-        )
+    except DeadlineExceeded:
+        logger.error("⏱ Gemini API deadline exceeded")
+        raise HTTPException(status_code=504, detail="AI response timeout. Please try again.")
+    except Unauthenticated:
+        logger.error("❌ Gemini authentication failed")
+        raise HTTPException(status_code=401, detail="AI authentication failed. Check API key.")
     except Exception as e:
         logger.error(f"🔥 Unexpected error in Gemini call: {str(e)}")
         raise HTTPException(
@@ -220,7 +239,7 @@ def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:
     name="flexifit_progress",
     tags=["progress", "wellness", "behavior-science"],
     metadata={
-        "model": "gemini-2.0-flash-exp",
+        "model": GEMINI_MODEL,
         "feature": "progress-insights",
     },
 )
@@ -275,7 +294,9 @@ async def health_check():
     return {
         "status": "healthy",
         "opik": "configured" if OPIK_ENABLED else "disabled",
-        "gemini": "ready"
+        "gemini": "ready",
+        "gemini_model": GEMINI_MODEL,
+        "opik_project": os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon"),
     }
 
 @app.post("/chat", response_model=ChatResponse)

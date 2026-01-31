@@ -14,6 +14,12 @@ class ProgressStore {
     return '$y-$m-$d';
   }
 
+  static Future<bool> isDoneToday() async {
+    final now = DateTime.now();
+    final completions = await getCompletions();
+    return completions[_todayKey(now)] == true;
+  }
+
   static Future<String?> getGoal() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(goalKey);
@@ -61,7 +67,8 @@ class ProgressStore {
     int streak = 0;
 
     for (int i = 0; i < 3650; i++) {
-      final day = DateTime(base.year, base.month, base.day).subtract(Duration(days: i));
+      final day =
+          DateTime(base.year, base.month, base.day).subtract(Duration(days: i));
       final key = _todayKey(day);
       final done = completions[key] == true;
       if (done) {
@@ -74,7 +81,9 @@ class ProgressStore {
     return streak;
   }
 
-  static List<Map<String, dynamic>> last7DaysTrend(Map<String, bool> completions, {DateTime? now}) {
+  static List<Map<String, dynamic>> last7DaysTrend(
+      Map<String, bool> completions,
+      {DateTime? now}) {
     final base = now ?? DateTime.now();
     final start = DateTime(base.year, base.month, base.day);
 
@@ -88,7 +97,8 @@ class ProgressStore {
     });
   }
 
-  static double completionRate7d(Map<String, bool> completions, {DateTime? now}) {
+  static double completionRate7d(Map<String, bool> completions,
+      {DateTime? now}) {
     final trend = last7DaysTrend(completions, now: now);
     final doneCount = trend.where((d) => d['done'] == true).length;
     return (doneCount / 7.0) * 100.0;
@@ -113,7 +123,8 @@ class ProgressStore {
 
   static Future<void> setChatHistory(List<Map<String, dynamic>> items) async {
     final prefs = await SharedPreferences.getInstance();
-    final trimmed = items.length > 20 ? items.sublist(items.length - 20) : items;
+    final trimmed =
+        items.length > 20 ? items.sublist(items.length - 20) : items;
     await prefs.setString(chatHistoryKey, jsonEncode(trimmed));
   }
 }
