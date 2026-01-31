@@ -21,7 +21,7 @@ except Exception:
     def configure(*args, **kwargs):
         return None
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    def track(*args, **kwargs):
         def _decorator(fn):
             return fn
 
@@ -35,15 +35,21 @@ load_dotenv()
 
 # Configure Opik for observability
 OPIK_ENABLED = False
+OPIK_CONFIG_ERROR: Optional[str] = None
 if OPIK_AVAILABLE:
     try:
-        opik_api_key = os.getenv("OPIK_API_KEY")
-        opik_workspace = os.getenv("OPIK_WORKSPACE")
+        opik_api_key = os.getenv("OPIK_API_KEY") or os.getenv("COMET_API_KEY")
+        opik_workspace = os.getenv("OPIK_WORKSPACE") or os.getenv("COMET_WORKSPACE")
         opik_project = os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon")
         opik_url = os.getenv("OPIK_URL")
 
         if not opik_api_key:
             raise ValueError("OPIK_API_KEY not set")
+
+        # Provide Comet-compatible env aliases used by some Opik SDK versions.
+        os.environ.setdefault("COMET_API_KEY", opik_api_key)
+        if opik_workspace:
+            os.environ.setdefault("COMET_WORKSPACE", opik_workspace)
 
         # Hint project selection for SDKs that support env-based project routing.
         os.environ.setdefault("OPIK_PROJECT_NAME", opik_project)
@@ -54,8 +60,17 @@ if OPIK_AVAILABLE:
         kwargs = {}
         if "api_key" in sig.parameters:
             kwargs["api_key"] = opik_api_key
-        if "workspace" in sig.parameters and opik_workspace:
-            kwargs["workspace"] = opik_workspace
+        if "workspace" in sig.parameters:
+            # If workspace is required by the SDK, surface a clear error.
+            workspace_param = sig.parameters["workspace"]
+            workspace_required = workspace_param.default is inspect._empty
+            if workspace_required and not opik_workspace:
+                raise ValueError(
+                    "OPIK_WORKSPACE not set (required by installed opik SDK). "
+                    "Add OPIK_WORKSPACE in Railway Variables."
+                )
+            if opik_workspace:
+                kwargs["workspace"] = opik_workspace
         if "url" in sig.parameters and opik_url:
             kwargs["url"] = opik_url
         if "project_name" in sig.parameters:
@@ -67,6 +82,7 @@ if OPIK_AVAILABLE:
         OPIK_ENABLED = True
         logger.info("✓ Opik configured successfully")
     except Exception as e:
+        OPIK_CONFIG_ERROR = str(e)
         logger.warning(
             f"⚠ Opik not fully configured: {e}. Continuing without observability."
         )
@@ -128,11 +144,48 @@ FEW-SHOT EXAMPLES:
 """
 
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-model = genai.GenerativeModel(
-    model_name=GEMINI_MODEL,
-    system_instruction=SYSTEM_INSTRUCTION,
-)
+def _select_gemini_model() -> str:
+    requested = (os.getenv("GEMINI_MODEL") or "").strip()
+    if requested.startswith("models/"):
+        requested = requested[len("models/") :]
+
+    # 1) Try requested model if provided.
+    if requested:
+        try:
+            if hasattr(genai, "get_model"):
+                genai.get_model(f"models/{requested}")
+            return requested
+        except Exception as e:
+            logger.warning(f"Requested GEMINI_MODEL '{requested}' not available: {e}")
+
+    # 2) Otherwise, pick the first model that supports generateContent.
+    try:
+        available = []
+        for m in genai.list_models():
+            name = getattr(m, "name", "") or ""
+            methods = getattr(m, "supported_generation_methods", []) or []
+            if "generateContent" not in methods:
+                continue
+            short = name.replace("models/", "")
+            if short:
+                available.append(short)
+
+        # Prefer flash models first for speed/cost.
+        for preferred in ("flash", "pro"):
+            for m in available:
+                if preferred in m:
+                    return m
+        if available:
+            return available[0]
+    except Exception as e:
+        logger.warning(f"Could not list Gemini models: {e}")
+
+    # 3) Last resort fallback.
+    return "gemini-pro"
+
+
+GEMINI_MODEL = _select_gemini_model()
+model = genai.GenerativeModel(model_name=GEMINI_MODEL, system_instruction=SYSTEM_INSTRUCTION)
 
 class ChatMessage(BaseModel):
     role: str
@@ -309,6 +362,7 @@ async def health_check():
     return {
         "status": "healthy",
         "opik": "configured" if OPIK_ENABLED else "disabled",
+        "opik_error": None if OPIK_ENABLED else OPIK_CONFIG_ERROR,
         "gemini": "ready",
         "gemini_model": GEMINI_MODEL,
         "opik_project": os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon"),
