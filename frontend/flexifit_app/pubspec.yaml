@@ -36,6 +36,9 @@ dependencies:
   dash_chat_2: ^0.0.20
   speech_to_text: ^6.6.0
   confetti: ^0.8.0
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+  flutter_timezone: ^2.1.0
 
 dev_dependencies:
   flutter_test:

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
+import 'notification_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.init();
   runApp(const FlexiFitApp());
 }
 
@@ -24,7 +27,7 @@ class FlexiFitApp extends StatelessWidget {
           foregroundColor: Colors.teal.shade900,
         ),
       ),
-        home: const HomeScreen(),
+      home: const HomeScreen(),
     );
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 import 'api_service.dart';
 import 'progress_store.dart';
+import 'notification_service.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -23,6 +25,9 @@ class ProgressScreenState extends State<ProgressScreen> {
   int? _microHabitsOffered;
   DateTime? _lastSyncedAt;
 
+  bool _dailyNudgeEnabled = false;
+  TimeOfDay? _dailyNudgeTime;
+
   @override
   void initState() {
     super.initState();
@@ -32,6 +37,9 @@ class ProgressScreenState extends State<ProgressScreen> {
   Future<void> reload() async {
     final goal = await ProgressStore.getGoal();
     final completions = await ProgressStore.getCompletions();
+
+    final nudgeEnabled = await ProgressStore.getDailyNudgeEnabled();
+    final nudgeTime = await ProgressStore.getDailyNudgeTime();
 
     final streak = ProgressStore.computeStreak(completions);
     final trend = ProgressStore.last7DaysTrend(completions);
@@ -48,7 +56,96 @@ class ProgressScreenState extends State<ProgressScreen> {
       _trend7d = trend;
       _completionRate7d = rate;
       _doneToday = doneToday;
+
+      _dailyNudgeEnabled = nudgeEnabled;
+      _dailyNudgeTime = nudgeTime == null
+          ? null
+          : TimeOfDay(hour: nudgeTime.hour, minute: nudgeTime.minute);
     });
+  }
+
+  List<String> _normalizedInsights(String? raw) {
+    final text = (raw ?? '').trim();
+    if (text.isEmpty) return const [];
+
+    if (text.startsWith('[') && text.endsWith(']')) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) {
+          return decoded
+              .whereType<dynamic>()
+              .map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toList(growable: false);
+        }
+      } catch (_) {
+        // Fall back to newline-based parsing.
+      }
+    }
+
+    return text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .map((l) {
+          final normalized = l.startsWith('- ') ? l.substring(2) : l;
+          return normalized.startsWith('• ') ? normalized.substring(2) : normalized;
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> _pickDailyNudgeTime() async {
+    final initial = _dailyNudgeTime ?? const TimeOfDay(hour: 17, minute: 0);
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+    if (selected == null) return;
+
+    await ProgressStore.setDailyNudgeTime(
+      hour: selected.hour,
+      minute: selected.minute,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _dailyNudgeTime = selected;
+    });
+
+    if (_dailyNudgeEnabled) {
+      await NotificationService.instance.scheduleDailyNudge(
+        time: selected,
+        goal: _goal,
+      );
+    }
+  }
+
+  Future<void> _setDailyNudgeEnabled(bool enabled) async {
+    await ProgressStore.setDailyNudgeEnabled(enabled);
+
+    if (!mounted) return;
+    setState(() {
+      _dailyNudgeEnabled = enabled;
+    });
+
+    if (!enabled) {
+      await NotificationService.instance.cancelDailyNudge();
+      return;
+    }
+
+    final time = _dailyNudgeTime ?? const TimeOfDay(hour: 17, minute: 0);
+    if (_dailyNudgeTime == null) {
+      await ProgressStore.setDailyNudgeTime(hour: time.hour, minute: time.minute);
+      if (!mounted) return;
+      setState(() {
+        _dailyNudgeTime = time;
+      });
+    }
+
+    await NotificationService.instance.scheduleDailyNudge(
+      time: time,
+      goal: _goal,
+    );
   }
 
   Future<void> _markDoneToday() async {
@@ -118,14 +215,7 @@ class ProgressScreenState extends State<ProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final goalText = _goal ?? 'Not set';
-    final insightsLines = (_aiInsights ?? '')
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .map((l) {
-      final normalized = l.startsWith('- ') ? l.substring(2) : l;
-      return normalized.startsWith('• ') ? normalized.substring(2) : normalized;
-    }).toList();
+    final insightsLines = _normalizedInsights(_aiInsights);
 
     return RefreshIndicator(
       onRefresh: reload,
@@ -136,6 +226,55 @@ class ProgressScreenState extends State<ProgressScreen> {
             title: 'Main Goal',
             value: goalText,
             icon: Icons.flag,
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Daily Nudge',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Switch(
+                        value: _dailyNudgeEnabled,
+                        onChanged: (v) => _setDailyNudgeEnabled(v),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'A gentle daily trigger to open the app and negotiate a tiny step.',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _dailyNudgeTime == null
+                              ? 'Time: not set'
+                              : 'Time: ${_dailyNudgeTime!.hour.toString().padLeft(2, '0')}:${_dailyNudgeTime!.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickDailyNudgeTime,
+                        icon: const Icon(Icons.schedule),
+                        label: const Text('Pick time'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Card(

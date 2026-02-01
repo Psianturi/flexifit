@@ -7,6 +7,10 @@ class ProgressStore {
   static const String completionsKey = 'completions_by_date';
   static const String chatHistoryKey = 'chat_history_v1';
 
+  static const String dailyNudgeEnabledKey = 'daily_nudge_enabled_v1';
+  static const String dailyNudgeHourKey = 'daily_nudge_hour_v1';
+  static const String dailyNudgeMinuteKey = 'daily_nudge_minute_v1';
+
   static String _todayKey(DateTime now) {
     final y = now.year.toString().padLeft(4, '0');
     final m = now.month.toString().padLeft(2, '0');
@@ -126,5 +130,31 @@ class ProgressStore {
     final trimmed =
         items.length > 20 ? items.sublist(items.length - 20) : items;
     await prefs.setString(chatHistoryKey, jsonEncode(trimmed));
+  }
+
+  static Future<bool> getDailyNudgeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(dailyNudgeEnabledKey) ?? false;
+  }
+
+  static Future<void> setDailyNudgeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(dailyNudgeEnabledKey, enabled);
+  }
+
+  static Future<({int hour, int minute})?> getDailyNudgeTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hour = prefs.getInt(dailyNudgeHourKey);
+    final minute = prefs.getInt(dailyNudgeMinuteKey);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23) return null;
+    if (minute < 0 || minute > 59) return null;
+    return (hour: hour, minute: minute);
+  }
+
+  static Future<void> setDailyNudgeTime({required int hour, required int minute}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(dailyNudgeHourKey, hour);
+    await prefs.setInt(dailyNudgeMinuteKey, minute);
   }
 }
