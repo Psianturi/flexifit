@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:confetti/confetti.dart';
 import 'api_service.dart';
 import 'progress_store.dart';
+import 'app_config.dart';
 
 class ChatScreen extends StatefulWidget {
   final bool embedded;
@@ -37,6 +38,12 @@ class ChatScreenState extends State<ChatScreen> {
   bool _showActionButtons = false;
   String _currentAgreedHabit = "";
   int _streakCount = 0;
+
+  double? _lastEmpathyScore;
+  String? _lastEmpathyRationale;
+  bool? _lastRetryUsed;
+  double? _lastInitialEmpathyScore;
+  String? _lastPromptVersion;
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechReady = false;
@@ -384,11 +391,20 @@ class ChatScreenState extends State<ChatScreen> {
       };
     }).toList();
 
-    String responseText = await ApiService.sendMessage(
+    final result = await ApiService.sendMessage(
       message: message.text,
       currentGoal: _userGoal ?? "Stay Healthy",
       history: historyPayload,
     );
+
+    // Debug-only: keep judge metrics in memory (not persisted in chat history).
+    _lastEmpathyScore = result.empathyScore;
+    _lastEmpathyRationale = result.empathyRationale;
+    _lastRetryUsed = result.retryUsed;
+    _lastInitialEmpathyScore = result.initialEmpathyScore;
+    _lastPromptVersion = result.promptVersion;
+
+    final responseText = result.response;
 
     _stopLoadingAnimation();
     setState(() {
@@ -521,6 +537,8 @@ class ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showDebug = AppConfig.showDebugEvals;
+
     final content = Column(
       children: [
         Container(
@@ -592,6 +610,42 @@ class ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               ),
+              if (showDebug && (_lastEmpathyScore != null || _lastEmpathyRationale != null))
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.black.withOpacity(0.08)),
+                  ),
+                  child: DefaultTextStyle(
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
+                      fontSize: 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '🔍 Eval: empathy ${_lastEmpathyScore?.toStringAsFixed(0) ?? '?'} / 5'
+                          '${_lastInitialEmpathyScore != null ? ' (initial ${_lastInitialEmpathyScore!.toStringAsFixed(0)}/5)' : ''}'
+                          '${_lastRetryUsed == true ? ' • retry used' : ''}'
+                          '${_lastPromptVersion != null ? ' • ${_lastPromptVersion!}' : ''}',
+                        ),
+                        if ((_lastEmpathyRationale ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _lastEmpathyRationale!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ),
               // Micro-Contract Action Button
               if (_showActionButtons)
                 Container(

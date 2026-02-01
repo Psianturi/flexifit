@@ -11,6 +11,10 @@ class AppConfig {
 
   static const String _railwayBaseUrl = 'https://flexifit-production.up.railway.app';
 
+  /// Debug-only: show LLM-as-judge metrics in the UI.
+  static const bool showDebugEvals =
+      bool.fromEnvironment('SHOW_DEBUG_EVALS', defaultValue: false);
+
   static String get apiBaseUrl {
     if (_definedBaseUrl.isNotEmpty) {
       return _definedBaseUrl.replaceAll(RegExp(r'/*$'), '');

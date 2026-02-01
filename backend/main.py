@@ -206,6 +206,7 @@ def _select_gemini_model() -> str:
 
 
 GEMINI_MODEL = _select_gemini_model()
+PROMPT_VERSION = (os.getenv("PROMPT_VERSION") or "v1").strip() or "v1"
 model = genai.GenerativeModel(model_name=GEMINI_MODEL, system_instruction=SYSTEM_INSTRUCTION)
 
 class ChatMessage(BaseModel):
@@ -221,6 +222,9 @@ class ChatResponse(BaseModel):
     response: str
     empathy_score: Optional[float] = None
     empathy_rationale: Optional[str] = None
+    prompt_version: Optional[str] = None
+    retry_used: Optional[bool] = None
+    initial_empathy_score: Optional[float] = None
 
 class ProgressData(BaseModel):
     goal: str
@@ -260,6 +264,7 @@ class WeeklyMotivationResponse(BaseModel):
     tags=["wellness", "behavior-science", "bj-fogg"],
     metadata={
         "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
         "methodology": "tiny-habits",
         "feature": "negotiator-loop"
     }
@@ -325,24 +330,99 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
 
 
 @track(
+    name="flexifit_negotiation_retry",
+    tags=["wellness", "behavior-science", "bj-fogg", "retry"],
+    metadata={
+        "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
+        "feature": "negotiator-loop-retry",
+    },
+)
+def call_gemini_negotiator_retry(
+    user_msg: str,
+    goal: str,
+    history: List[ChatMessage],
+    previous_reply: str,
+    judge_score: int,
+    judge_rationale: str,
+) -> str:
+    """Second-pass rewrite when the judge flags low empathy.
+
+    Intentionally capped to 1 retry to control latency/cost.
+    """
+
+    def _history_to_transcript(items: List[ChatMessage]) -> str:
+        lines: List[str] = []
+        for msg in items[-12:]:
+            role = (msg.role or "").strip().lower()
+            text = (msg.text or "").strip()
+            if not text:
+                continue
+
+            if role in {"model", "assistant", "ai", "bot"}:
+                speaker = "FLEXIFIT"
+            elif role in {"user", "human"}:
+                speaker = "USER"
+            else:
+                continue
+
+            lines.append(f"{speaker}: {text}")
+        return "\n".join(lines)
+
+    transcript = _history_to_transcript(history)
+    prompt = (
+        "You are FlexiFit. Your previous reply was judged as not empathetic enough. "
+        "Rewrite it to be more validating and more micro-habit-focused, while staying concise.\n"
+        "Constraints:\n"
+        "- 2-3 short sentences max\n"
+        "- Validate feelings first\n"
+        "- Propose ONE tiny, doable micro-habit\n"
+        "- No judgement, no lecturing\n\n"
+        f"GOAL: {goal}\n\n"
+        f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
+        f"NEW_MESSAGE (USER): {user_msg}\n\n"
+        f"PREVIOUS_REPLY: {previous_reply}\n"
+        f"JUDGE_SCORE: {judge_score}/5\n"
+        f"JUDGE_RATIONALE: {judge_rationale}\n"
+    )
+
+    response = model.generate_content(
+        prompt,
+        request_options={"timeout": 20},
+    )
+
+    text = (response.text or "").strip()
+    if not text:
+        raise ValueError("Empty AI response (retry)")
+    return text
+
+
+@track(
     name="flexifit_eval_empathy",
     tags=["eval", "llm-as-judge", "empathy"],
     metadata={
         "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
         "metric": "empathy_score",
-        "scale": "0_or_1",
+        "scale": "1_to_5",
     },
 )
 def call_gemini_empathy_judge(user_text: str, ai_text: str) -> dict:
-    """Return a strict JSON dict: { empathy: 0|1, rationale: string }."""
+    """Return a strict JSON dict: { empathy: 1..5, rationale: string }.
+
+    This is an online LLM-as-a-judge evaluation for every AI reply.
+    """
     prompt = (
         "You are an evaluator for a habit-coaching AI. "
         "Score the AI reply for EMPATHY + MICRO-HABIT behavior. "
         "Return STRICT JSON only (no markdown).\n"
-        "Schema: {\"empathy\": 0|1, \"rationale\": \"...\"}.\n"
-        "Scoring:\n"
-        "- empathy=1 if the reply acknowledges/validates the user's feelings AND suggests a tiny, doable micro-habit.\n"
-        "- empathy=0 otherwise.\n\n"
+        "Schema: {\"empathy\": 1|2|3|4|5, \"rationale\": \"...\"}.\n"
+        "Scoring (1-5):\n"
+        "- 5: Clearly validates feelings + proposes an ultra-small, doable micro-habit + supportive tone.\n"
+        "- 4: Validates feelings + proposes a realistic micro-habit, minor wording issues.\n"
+        "- 3: Some empathy OR some micro-habit, but not both strongly.\n"
+        "- 2: Weak empathy and vague/too-big action step.\n"
+        "- 1: No empathy, dismissive, or no actionable micro-habit.\n\n"
         f"USER: {user_text}\n"
         f"AI: {ai_text}\n"
     )
@@ -364,11 +444,13 @@ def call_gemini_empathy_judge(user_text: str, ai_text: str) -> dict:
 
     empathy = payload.get("empathy")
     if isinstance(empathy, bool):
-        empathy = 1 if empathy else 0
+        empathy = 5 if empathy else 1
     if not isinstance(empathy, (int, float)):
-        raise ValueError("Empathy must be 0 or 1")
+        raise ValueError("Empathy must be 1..5")
 
-    empathy = 1 if float(empathy) >= 0.5 else 0
+
+    empathy = int(round(float(empathy)))
+    empathy = max(1, min(5, empathy))
     rationale = payload.get("rationale")
     rationale_text = str(rationale).strip() if rationale is not None else ""
 
@@ -402,6 +484,7 @@ def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:
     tags=["progress", "wellness", "behavior-science"],
     metadata={
         "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
         "feature": "progress-insights",
     },
 )
@@ -447,6 +530,7 @@ def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict
     tags=["progress", "motivation", "weekly"],
     metadata={
         "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
         "feature": "weekly-motivation",
     },
 )
@@ -501,10 +585,14 @@ async def health_check():
         "opik_error": None if OPIK_ENABLED else OPIK_CONFIG_ERROR,
         "gemini": "ready",
         "gemini_model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
         "opik_project": os.getenv("OPIK_PROJECT_NAME", "flexifit-hackathon"),
         "evals": {
-            "empathy_score": "enabled",
-            "type": "llm-as-judge",
+            "empathy_score": {
+                "enabled": True,
+                "type": "llm-as-judge",
+                "scale": "1-5",
+            },
         },
     }
 
@@ -527,10 +615,43 @@ async def chat_endpoint(request: ChatRequest):
 
         empathy_score: Optional[float] = None
         empathy_rationale: Optional[str] = None
+        retry_used: bool = False
+        initial_empathy_score: Optional[float] = None
         try:
             judged = call_gemini_empathy_judge(request.user_message, ai_reply)
             empathy_score = float(judged.get("empathy"))
             empathy_rationale = str(judged.get("rationale") or "").strip() or None
+
+            initial_empathy_score = empathy_score
+
+            retry_enabled = str(os.getenv("RETRY_ON_LOW_EMPATHY", "false")).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            retry_threshold = int(os.getenv("RETRY_EMPATHY_THRESHOLD", "3"))
+            retry_threshold = max(1, min(5, retry_threshold))
+
+            if retry_enabled and empathy_score is not None and empathy_score < retry_threshold:
+                prev_score = int(round(empathy_score))
+                prev_rationale = empathy_rationale or ""
+
+                ai_reply_retry = call_gemini_negotiator_retry(
+                    user_msg=request.user_message,
+                    goal=request.current_goal,
+                    history=request.chat_history,
+                    previous_reply=ai_reply,
+                    judge_score=prev_score,
+                    judge_rationale=prev_rationale,
+                )
+
+                # Re-judge the improved response so Opik shows the effect.
+                judged2 = call_gemini_empathy_judge(request.user_message, ai_reply_retry)
+                empathy_score = float(judged2.get("empathy"))
+                empathy_rationale = str(judged2.get("rationale") or "").strip() or None
+                ai_reply = ai_reply_retry
+                retry_used = True
         except Exception as e:
             logger.warning(f"⚠ Empathy eval skipped: {e}")
         
@@ -539,6 +660,9 @@ async def chat_endpoint(request: ChatRequest):
             response=ai_reply,
             empathy_score=empathy_score,
             empathy_rationale=empathy_rationale,
+            prompt_version=PROMPT_VERSION,
+            retry_used=retry_used,
+            initial_empathy_score=initial_empathy_score,
         )
 
     except HTTPException:

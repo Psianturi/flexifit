@@ -68,6 +68,24 @@ To verify Opik is active:
 2. Redeploy / restart
 3. Check `GET /health` — it should show `"opik": "configured"`
 
+## Experiments (Golden Dataset)
+
+To demonstrate **data-driven improvement**, run a small golden-dataset experiment that logs traces + online evals:
+
+```bash
+cd backend
+
+# (optional) enable the self-correction loop for this run
+set RETRY_ON_LOW_EMPATHY=true
+set RETRY_EMPATHY_THRESHOLD=3
+
+python evals/run_experiment.py --base-url http://localhost:8000 --label v1
+```
+
+Tips for judging:
+- Change `PROMPT_VERSION` (and/or `GEMINI_MODEL`) and rerun with a new `--label`.
+- In Opik, filter traces by `name=flexifit_experiment_case` and compare score distributions.
+
 ## Railway Deployment (Monorepo)
 
 This repo is a monorepo:

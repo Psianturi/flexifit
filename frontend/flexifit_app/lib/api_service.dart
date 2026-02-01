@@ -20,12 +20,30 @@ class WeeklyMotivationResult {
   const WeeklyMotivationResult({required this.motivation});
 }
 
+class ChatResult {
+  final String response;
+  final double? empathyScore;
+  final String? empathyRationale;
+  final String? promptVersion;
+  final bool? retryUsed;
+  final double? initialEmpathyScore;
+
+  const ChatResult({
+    required this.response,
+    this.empathyScore,
+    this.empathyRationale,
+    this.promptVersion,
+    this.retryUsed,
+    this.initialEmpathyScore,
+  });
+}
+
 class ApiService {
   static String get baseUrl {
     return AppConfig.apiBaseUrl;
   }
 
-  static Future<String> sendMessage({
+  static Future<ChatResult> sendMessage({
     required String message,
     required String currentGoal,
     required List<Map<String, String>> history,
@@ -47,7 +65,19 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['response'];
+        return ChatResult(
+          response: (data is Map ? data['response']?.toString() : null) ?? '',
+          empathyScore: data is Map && data['empathy_score'] is num
+              ? (data['empathy_score'] as num).toDouble()
+              : null,
+          empathyRationale:
+              data is Map ? data['empathy_rationale']?.toString() : null,
+          promptVersion: data is Map ? data['prompt_version']?.toString() : null,
+          retryUsed: data is Map ? (data['retry_used'] == true) : null,
+          initialEmpathyScore: data is Map && data['initial_empathy_score'] is num
+              ? (data['initial_empathy_score'] as num).toDouble()
+              : null,
+        );
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
@@ -57,19 +87,34 @@ class ApiService {
       // Demo safety fallbacks with DEAL_MADE integration
       if (message.toLowerCase().contains('tired') ||
           message.toLowerCase().contains('exhausted')) {
-        return "[DEAL_MADE] I understand you're tired. Let's lock in: just put on your workout clothes. That's a tiny win! 💪";
+        return const ChatResult(
+          response:
+              "[DEAL_MADE] I understand you're tired. Let's lock in: just put on your workout clothes. That's a tiny win! 💪",
+        );
       } else if (message.toLowerCase().contains('busy') ||
           message.toLowerCase().contains('time')) {
-        return "[DEAL_MADE] Busy days happen! Let's commit to: 2 minutes of your goal. Micro-habits build neural pathways! 🧠";
+        return const ChatResult(
+          response:
+              "[DEAL_MADE] Busy days happen! Let's commit to: 2 minutes of your goal. Micro-habits build neural pathways! 🧠",
+        );
       } else if (message.toLowerCase().contains('ready') ||
           message.toLowerCase().contains('action')) {
-        return "[DEAL_MADE] Love the energy! Let's lock in: your full goal today! Consistency beats intensity! 🔥";
+        return const ChatResult(
+          response:
+              "[DEAL_MADE] Love the energy! Let's lock in: your full goal today! Consistency beats intensity! 🔥",
+        );
       } else if (message.toLowerCase().contains('ok') ||
           message.toLowerCase().contains('fine') ||
           message.toLowerCase().contains('yes')) {
-        return "[DEAL_MADE] Perfect! That's how we build unstoppable habits! Let's do this! 🚀";
+        return const ChatResult(
+          response:
+              "[DEAL_MADE] Perfect! That's how we build unstoppable habits! Let's do this! 🚀",
+        );
       }
-      return "Connection issue, but here's what I know: tiny habits beat big goals. What's the smallest step you can take? 🤖";
+      return const ChatResult(
+        response:
+            "Connection issue, but here's what I know: tiny habits beat big goals. What's the smallest step you can take? 🤖",
+      );
     }
   }
 
