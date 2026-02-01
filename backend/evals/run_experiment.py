@@ -121,6 +121,52 @@ DEFAULT_DATASET: List[Dict[str, str]] = [
 
 
 @track(
+    name="flexifit_experiment_run",
+    tags=["experiment"],
+)
+def run_experiment(
+    base_url: str,
+    run_id: str,
+    label: str,
+    timeout_s: int,
+) -> Dict[str, Any]:
+    outputs: List[Dict[str, Any]] = []
+    scores: List[float] = []
+
+    for case in DEFAULT_DATASET:
+        out = run_case(
+            base_url=base_url,
+            run_id=run_id,
+            label=label,
+            case=case,
+            timeout_s=timeout_s,
+        )
+        outputs.append(out)
+
+        s = out.get("empathy_score")
+        if isinstance(s, (int, float)):
+            scores.append(float(s))
+
+    avg = sum(scores) / len(scores) if scores else 0.0
+    return {
+        "run_id": run_id,
+        "label": label,
+        "base_url": base_url,
+        "cases": len(outputs),
+        "avg_empathy": round(avg, 3),
+        "scores": scores,
+        "outputs": outputs,
+        "env": {
+            "PROMPT_VERSION": os.getenv("PROMPT_VERSION"),
+            "GEMINI_MODEL": os.getenv("GEMINI_MODEL"),
+            "RETRY_ON_LOW_EMPATHY": os.getenv("RETRY_ON_LOW_EMPATHY"),
+            "RETRY_EMPATHY_THRESHOLD": os.getenv("RETRY_EMPATHY_THRESHOLD"),
+            "OPIK_PROJECT_NAME": os.getenv("OPIK_PROJECT_NAME"),
+        },
+    }
+
+
+@track(
     name="flexifit_experiment_case",
     tags=["experiment", "eval", "llm-as-judge"],
 )
@@ -192,34 +238,23 @@ def main() -> int:
 
     print(f"Running experiment run_id={run_id} label={label} base_url={base_url}")
 
-    outputs: List[Dict[str, Any]] = []
-    scores: List[float] = []
+    try:
+        summary = run_experiment(
+            base_url=base_url,
+            run_id=run_id,
+            label=label,
+            timeout_s=args.timeout,
+        )
+    except Exception as e:
+        print(f"ERROR running experiment: {e}")
+        return 2
 
-    for case in DEFAULT_DATASET:
-        try:
-            out = run_case(base_url=base_url, run_id=run_id, label=label, case=case, timeout_s=args.timeout)
-            outputs.append(out)
-
-            s = out.get("empathy_score")
-            if isinstance(s, (int, float)):
-                scores.append(float(s))
-
-            print(
-                f"- {case['id']}: empathy={out.get('empathy_score')} retry={out.get('retry_used')} duration_ms={out.get('duration_ms')}"
-            )
-        except Exception as e:
-            print(f"- {case.get('id')}: ERROR {e}")
-
-    avg = sum(scores) / len(scores) if scores else 0.0
-    summary = {
-        "run_id": run_id,
-        "label": label,
-        "base_url": base_url,
-        "cases": len(outputs),
-        "avg_empathy": round(avg, 3),
-        "scores": scores,
-        "outputs": outputs,
-    }
+    # Keep console output short and demo-friendly.
+    for out in summary.get("outputs", []):
+        case_id = out.get("case_id")
+        print(
+            f"- {case_id}: empathy={out.get('empathy_score')} retry={out.get('retry_used')} duration_ms={out.get('duration_ms')}"
+        )
 
     out_path = os.path.join(os.path.dirname(__file__), f"experiment_{run_id}_{label}.json")
     try:

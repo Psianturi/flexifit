@@ -75,9 +75,9 @@ To demonstrate **data-driven improvement**, run a small golden-dataset experimen
 ```bash
 cd backend
 
-# (optional) enable the self-correction loop for this run
-set RETRY_ON_LOW_EMPATHY=true
-set RETRY_EMPATHY_THRESHOLD=3
+
+$env:RETRY_ON_LOW_EMPATHY="true"
+$env:RETRY_EMPATHY_THRESHOLD="3"
 
 python evals/run_experiment.py --base-url http://localhost:8000 --label v1
 ```

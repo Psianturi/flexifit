@@ -118,3 +118,12 @@ flutter build apk --release
 ```python
 context_prompt = f"USER'S GOAL: {goal}\nUSER SAYS: {message}"
 ```
+
+## Best Use of Opik (Evaluation + Observability)
+
+We implemented a **closed-loop, self-improving AI system** using Opik tracing + online LLM-as-a-judge evaluations:
+
+1. **Real-time Evaluation (LLM-as-judge):** Every AI response is scored on **Empathy (1-5)** with a human-readable rationale.
+2. **Automated Self-Correction:** If the judge score falls below a threshold, the backend automatically rewrites the response once **before** returning it to the user.
+3. **Scientific Experiments:** A golden-dataset experiment runner ([backend/evals/run_experiment.py](backend/evals/run_experiment.py)) runs fixed scenarios across prompt/model versions and logs results to Opik for comparison.
+4. **Client-Side Debugging:** A Flutter debug overlay (enabled via `--dart-define=SHOW_DEBUG_EVALS=true`) shows empathy score + rationale in real time without affecting production UX.

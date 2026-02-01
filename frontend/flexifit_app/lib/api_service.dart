@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
@@ -61,7 +62,7 @@ class ApiService {
               'chat_history': history,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 25));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -84,6 +85,14 @@ class ApiService {
     } catch (e) {
       debugPrint('ApiService.sendMessage failed: $e');
       debugPrint('ApiService baseUrl: $baseUrl');
+
+      if (e is TimeoutException) {
+        return const ChatResult(
+          response:
+              "I'm having trouble reaching the server (it may be waking up). Please try again in a moment.",
+        );
+      }
+
       // Demo safety fallbacks with DEAL_MADE integration
       if (message.toLowerCase().contains('tired') ||
           message.toLowerCase().contains('exhausted')) {
@@ -102,13 +111,6 @@ class ApiService {
         return const ChatResult(
           response:
               "[DEAL_MADE] Love the energy! Let's lock in: your full goal today! Consistency beats intensity! 🔥",
-        );
-      } else if (message.toLowerCase().contains('ok') ||
-          message.toLowerCase().contains('fine') ||
-          message.toLowerCase().contains('yes')) {
-        return const ChatResult(
-          response:
-              "[DEAL_MADE] Perfect! That's how we build unstoppable habits! Let's do this! 🚀",
         );
       }
       return const ChatResult(

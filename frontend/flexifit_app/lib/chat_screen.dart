@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:async';
 import 'package:confetti/confetti.dart';
+import 'package:flutter/services.dart';
 import 'api_service.dart';
 import 'progress_store.dart';
 import 'app_config.dart';
@@ -448,13 +449,13 @@ class ChatScreenState extends State<ChatScreen> {
       _showActionButtons = true;
       // Extract habit from response (simple parsing)
       if (response.toLowerCase().contains('walk')) {
-        _currentAgreedHabit = "Complete today's walk";
+        _currentAgreedHabit = "today's walk";
       } else if (response.toLowerCase().contains('workout')) {
-        _currentAgreedHabit = "Complete today's workout";
+        _currentAgreedHabit = "today's workout";
       } else if (response.toLowerCase().contains('read')) {
-        _currentAgreedHabit = "Complete today's reading";
+        _currentAgreedHabit = "today's reading";
       } else {
-        _currentAgreedHabit = "Complete today's activity";
+        _currentAgreedHabit = "today's micro-habit";
       }
     });
   }
@@ -467,6 +468,8 @@ class ChatScreenState extends State<ChatScreen> {
     await ProgressStore.markDoneToday();
     await _loadProgress();
     widget.onProgressChanged?.call();
+
+    HapticFeedback.mediumImpact();
 
     _playConfetti();
 
@@ -538,6 +541,16 @@ class ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final showDebug = AppConfig.showDebugEvals;
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final showQuickReplies = !keyboardOpen && _messages.length <= 1;
+
+    final debugHasData =
+        showDebug && (_lastEmpathyScore != null || _lastEmpathyRationale != null);
+
+    double reservedBottom = 0;
+    if (_isLoading) reservedBottom += 40;
+    if (_showActionButtons) reservedBottom += 86;
+    if (debugHasData) reservedBottom += 78;
 
     final content = Column(
       children: [
@@ -567,143 +580,180 @@ class ChatScreenState extends State<ChatScreen> {
           ),
         ),
         Expanded(
-          child: Column(
+          child: Stack(
             children: [
-              // Quick Reply Buttons for Demo
-              Container(
-                padding: const EdgeInsets.all(8),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    _buildQuickReply("I'm really tired today 😴"),
-                    _buildQuickReply("Super busy, no time!"),
-                    _buildQuickReply("Ready for action! Let's go! 🔥"),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: DashChat(
-                  currentUser: _currentUser,
-                  onSend: _onSend,
-                  messages: _messages,
-                  typingUsers: _isLoading ? [_aiUser] : [],
-                  inputOptions: InputOptions(
-                    inputDecoration: const InputDecoration(
-                      hintText: "I'm tired... / Ready to go! / How do I start?",
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                    inputTextStyle: const TextStyle(fontSize: 16),
-                  ),
-                  messageOptions: MessageOptions(
-                    showTime: true,
-                    messageDecorationBuilder:
-                        (message, previousMessage, nextMessage) {
-                      return BoxDecoration(
-                        color: message.user.id == '1'
-                            ? Colors.teal.shade100
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              if (showDebug && (_lastEmpathyScore != null || _lastEmpathyRationale != null))
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.04),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black.withOpacity(0.08)),
-                  ),
-                  child: DefaultTextStyle(
-                    style: TextStyle(
-                      color: Colors.grey.shade800,
-                      fontSize: 12,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '🔍 Eval: empathy ${_lastEmpathyScore?.toStringAsFixed(0) ?? '?'} / 5'
-                          '${_lastInitialEmpathyScore != null ? ' (initial ${_lastInitialEmpathyScore!.toStringAsFixed(0)}/5)' : ''}'
-                          '${_lastRetryUsed == true ? ' • retry used' : ''}'
-                          '${_lastPromptVersion != null ? ' • ${_lastPromptVersion!}' : ''}',
-                        ),
-                        if ((_lastEmpathyRationale ?? '').trim().isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            _lastEmpathyRationale!,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
-                ),
-              // Micro-Contract Action Button
-              if (_showActionButtons)
-                Container(
-                  margin: const EdgeInsets.all(8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.handshake, color: Colors.green.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _currentAgreedHabit,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade800,
-                          ),
+              Column(
+                children: [
+                  if (showQuickReplies)
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildQuickReply("I'm really tired today 😴"),
+                            const SizedBox(width: 8),
+                            _buildQuickReply("Super busy, no time!"),
+                          ],
                         ),
                       ),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.check_circle),
-                        label: const Text("DONE!"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: reservedBottom),
+                      child: DashChat(
+                        currentUser: _currentUser,
+                        onSend: _onSend,
+                        messages: _messages,
+                        typingUsers: _isLoading ? [_aiUser] : [],
+                        inputOptions: InputOptions(
+                          inputDecoration: const InputDecoration(
+                            hintText: "I'm tired... / Ready to go! / How do I start?",
+                            border: OutlineInputBorder(),
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          inputTextStyle: const TextStyle(fontSize: 16),
                         ),
-                        onPressed: _markAsDone,
+                        messageOptions: MessageOptions(
+                          showTime: true,
+                          messageDecorationBuilder:
+                              (message, previousMessage, nextMessage) {
+                            return BoxDecoration(
+                              color: message.user.id == '1'
+                                  ? Colors.teal.shade100
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            );
+                          },
+                        ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              // Loading indicator with smart text
-              if (_isLoading)
-                Container(
+                ],
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _loadingText,
-                        style: TextStyle(
-                          color: Colors.teal.shade600,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
+                      if (debugHasData)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black.withOpacity(0.08)),
+                          ),
+                          child: DefaultTextStyle(
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              fontSize: 12,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '🔍 Eval: empathy ${_lastEmpathyScore?.toStringAsFixed(0) ?? '?'} / 5'
+                                  '${_lastInitialEmpathyScore != null ? ' (initial ${_lastInitialEmpathyScore!.toStringAsFixed(0)}/5)' : ''}'
+                                  '${_lastRetryUsed == true ? ' • retry used' : ''}'
+                                  '${_lastPromptVersion != null ? ' • ${_lastPromptVersion!}' : ''}',
+                                ),
+                                if ((_lastEmpathyRationale ?? '').trim().isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _lastEmpathyRationale!,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ]
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                      if (_showActionButtons)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.handshake, color: Colors.green.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "After you complete ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}, tap DONE.",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green.shade800,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Dismiss',
+                                onPressed: () {
+                                  setState(() {
+                                    _showActionButtons = false;
+                                  });
+                                },
+                                icon: Icon(Icons.close, color: Colors.green.shade700),
+                              ),
+                              const SizedBox(width: 6),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.check_circle),
+                                label: const Text("DONE"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _markAsDone,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_isLoading)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.teal.shade100),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _loadingText,
+                                  style: TextStyle(
+                                    color: Colors.teal.shade700,
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
+              ),
             ],
           ),
         ),
