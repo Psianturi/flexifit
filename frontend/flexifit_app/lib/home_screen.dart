@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'chat_screen.dart';
 import 'progress_screen.dart';
@@ -39,7 +40,20 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final isChatTab = _tabController.index == 0;
 
+    Widget content = TabBarView(
+      controller: _tabController,
+      children: [
+        ChatScreen(
+          key: _chatKey,
+          embedded: true,
+          onProgressChanged: () => _progressKey.currentState?.reload(),
+        ),
+        ProgressScreen(key: _progressKey),
+      ],
+    );
+
     return Scaffold(
+      backgroundColor: kIsWeb ? Colors.grey.shade100 : null,
       appBar: AppBar(
         title: Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
         bottom: TabBar(
@@ -71,16 +85,35 @@ class _HomeScreenState extends State<HomeScreen>
             ),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          ChatScreen(
-            key: _chatKey,
-            embedded: true,
-            onProgressChanged: () => _progressKey.currentState?.reload(),
-          ),
-          ProgressScreen(key: _progressKey),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // For web on wide screens, constrain content width for readability.
+          if (!kIsWeb || constraints.maxWidth < 900) {
+            return content;
+          }
+
+          const maxWidth = 720.0;
+          final height = constraints.maxHeight;
+
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: maxWidth),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(
+                  height: height - 32,
+                  child: Material(
+                    elevation: 2,
+                    borderRadius: BorderRadius.circular(16),
+                    clipBehavior: Clip.antiAlias,
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: content,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
