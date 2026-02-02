@@ -92,10 +92,9 @@ class ProgressScreenState extends State<ProgressScreen> {
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .map((l) {
-          final normalized = l.startsWith('- ') ? l.substring(2) : l;
-          return normalized.startsWith('• ') ? normalized.substring(2) : normalized;
-        })
-        .toList(growable: false);
+      final normalized = l.startsWith('- ') ? l.substring(2) : l;
+      return normalized.startsWith('• ') ? normalized.substring(2) : normalized;
+    }).toList(growable: false);
   }
 
   Future<void> _pickDailyNudgeTime() async {
@@ -139,7 +138,8 @@ class ProgressScreenState extends State<ProgressScreen> {
 
     final time = _dailyNudgeTime ?? const TimeOfDay(hour: 17, minute: 0);
     if (_dailyNudgeTime == null) {
-      await ProgressStore.setDailyNudgeTime(hour: time.hour, minute: time.minute);
+      await ProgressStore.setDailyNudgeTime(
+          hour: time.hour, minute: time.minute);
       if (!mounted) return;
       setState(() {
         _dailyNudgeTime = time;
@@ -270,216 +270,387 @@ class ProgressScreenState extends State<ProgressScreen> {
       _personaLoading = true;
     });
 
-    final persona = await _fetchPersona();
-
-    if (!mounted) return;
-    setState(() {
-      _cachedPersona = persona;
-      _personaLoading = false;
+    final personaFuture = _fetchPersona().then((persona) {
+      if (mounted) {
+        setState(() {
+          _cachedPersona = persona;
+        });
+      }
+      return persona;
     });
 
     if (!mounted) return;
-    await showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'persona',
-      barrierColor: Colors.black.withOpacity(0.75),
-      transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (context, _, __) {
-        final p = _cachedPersona ?? persona;
-        final asset = _assetForAvatar(p.avatarId);
-        final powerValue = (p.powerLevel / 100.0).clamp(0.0, 1.0);
+    try {
+      await showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'persona',
+        barrierColor: Colors.black.withOpacity(0.75),
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (context, _, __) {
+          return FutureBuilder<PersonaResult>(
+            future: personaFuture,
+            builder: (context, snapshot) {
+              final done = snapshot.connectionState == ConnectionState.done;
+              final p = snapshot.data ?? _cachedPersona;
 
-        return SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Material(
-                color: Colors.transparent,
-                child: Stack(
-                  children: [
-                    // Glow
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.tealAccent.withOpacity(0.20),
-                                blurRadius: 28,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color: Colors.teal.withOpacity(0.18),
-                                blurRadius: 48,
-                                spreadRadius: 6,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Card
-                    Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      clipBehavior: Clip.antiAlias,
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+              if (!done || p == null) {
+                return SafeArea(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Stack(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'IDENTITY UNLOCKED',
-                                    style: TextStyle(
-                                      letterSpacing: 1.2,
-                                      color: Colors.teal.shade800,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Close',
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: const Icon(Icons.close),
-                                )
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Center(
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0.92, end: 1.0),
-                                duration: const Duration(milliseconds: 520),
-                                curve: Curves.easeOutBack,
-                                builder: (context, scale, child) => Transform.scale(
-                                  scale: scale,
-                                  child: child,
-                                ),
+                            Positioned.fill(
+                              child: IgnorePointer(
                                 child: Container(
-                                  padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.teal.shade50,
-                                    borderRadius: BorderRadius.circular(18),
-                                    border: Border.all(color: Colors.teal.shade100),
-                                  ),
-                                  child: Image.asset(
-                                    asset,
-                                    width: 140,
-                                    height: 140,
-                                    fit: BoxFit.contain,
+                                    borderRadius: BorderRadius.circular(22),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color:
+                                            Colors.tealAccent.withOpacity(0.20),
+                                        blurRadius: 28,
+                                        spreadRadius: 2,
+                                      ),
+                                      BoxShadow(
+                                        color: Colors.teal.withOpacity(0.18),
+                                        blurRadius: 48,
+                                        spreadRadius: 6,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 14),
-                            Text(
-                              p.archetypeTitle,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              p.description,
-                              style: TextStyle(
-                                color: Colors.grey.shade800,
-                                height: 1.25,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                const Icon(Icons.bolt, size: 18),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'Power Level',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const Spacer(),
-                                Text('${p.powerLevel}/100'),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0.0, end: powerValue),
-                                duration: const Duration(milliseconds: 700),
-                                curve: Curves.easeOutCubic,
-                                builder: (context, value, _) {
-                                  return LinearProgressIndicator(
-                                    minHeight: 10,
-                                    value: value,
-                                    backgroundColor: Colors.grey.shade200,
-                                    color: Colors.teal,
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final text =
-                                          '${p.archetypeTitle}\n${p.description}\nPower: ${p.powerLevel}/100';
-                                      await Clipboard.setData(
-                                        ClipboardData(text: text),
-                                      );
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Copied to clipboard'),
+                            Material(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              clipBehavior: Clip.antiAlias,
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'GENERATING…',
+                                            style: TextStyle(
+                                              letterSpacing: 1.2,
+                                              color: Colors.teal.shade800,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                         ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.copy),
-                                    label: const Text('Copy'),
-                                  ),
+                                        IconButton(
+                                          tooltip: 'Close',
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          icon: const Icon(Icons.close),
+                                        )
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Center(
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(begin: 0.0, end: 1.0),
+                                        duration:
+                                            const Duration(milliseconds: 900),
+                                        curve: Curves.easeInOut,
+                                        builder: (context, value, child) {
+                                          return Transform.rotate(
+                                            angle: value * 6.28318,
+                                            child: child,
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 120,
+                                          height: 120,
+                                          decoration: BoxDecoration(
+                                            color: Colors.teal.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(18),
+                                            border: Border.all(
+                                                color: Colors.teal.shade100),
+                                          ),
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 34,
+                                              height: 34,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 3,
+                                                color: Colors.teal.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Unlocking your Flexi Identity…',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "Analyzing your last 7 days + negotiation style.",
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(begin: 0.05, end: 0.92),
+                                        duration:
+                                            const Duration(milliseconds: 1400),
+                                        curve: Curves.easeInOutCubic,
+                                        builder: (context, v, _) {
+                                          return LinearProgressIndicator(
+                                            minHeight: 10,
+                                            value: v,
+                                            backgroundColor:
+                                                Colors.grey.shade200,
+                                            color: Colors.teal,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: FilledButton.icon(
-                                    onPressed: () => Navigator.pop(context),
-                                    icon: const Icon(Icons.check_circle),
-                                    label: const Text('Nice!'),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ],
+                  ),
+                );
+              }
+
+              final asset = _assetForAvatar(p.avatarId);
+              final powerValue = (p.powerLevel / 100.0).clamp(0.0, 1.0);
+
+              return SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Stack(
+                        children: [
+                          // Glow
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(22),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          Colors.tealAccent.withOpacity(0.20),
+                                      blurRadius: 28,
+                                      spreadRadius: 2,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.teal.withOpacity(0.18),
+                                      blurRadius: 48,
+                                      spreadRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Card
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(22),
+                            clipBehavior: Clip.antiAlias,
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'IDENTITY UNLOCKED',
+                                          style: TextStyle(
+                                            letterSpacing: 1.2,
+                                            color: Colors.teal.shade800,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Close',
+                                        onPressed: () => Navigator.pop(context),
+                                        icon: const Icon(Icons.close),
+                                      )
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Center(
+                                    child: TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.92, end: 1.0),
+                                      duration:
+                                          const Duration(milliseconds: 520),
+                                      curve: Curves.easeOutBack,
+                                      builder: (context, scale, child) =>
+                                          Transform.scale(
+                                        scale: scale,
+                                        child: child,
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.teal.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                          border: Border.all(
+                                              color: Colors.teal.shade100),
+                                        ),
+                                        child: Image.asset(
+                                          asset,
+                                          width: 140,
+                                          height: 140,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    p.archetypeTitle,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    p.description,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade800,
+                                      height: 1.25,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.bolt, size: 18),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Power Level',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                      const Spacer(),
+                                      Text('${p.powerLevel}/100'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.0, end: powerValue),
+                                      duration:
+                                          const Duration(milliseconds: 700),
+                                      curve: Curves.easeOutCubic,
+                                      builder: (context, value, _) {
+                                        return LinearProgressIndicator(
+                                          minHeight: 10,
+                                          value: value,
+                                          backgroundColor: Colors.grey.shade200,
+                                          color: Colors.teal,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () async {
+                                            final text =
+                                                '${p.archetypeTitle}\n${p.description}\nPower: ${p.powerLevel}/100';
+                                            await Clipboard.setData(
+                                              ClipboardData(text: text),
+                                            );
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content:
+                                                    Text('Copied to clipboard'),
+                                              ),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.copy),
+                                          label: const Text('Copy'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: FilledButton.icon(
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          icon: const Icon(Icons.check_circle),
+                                          label: const Text('Nice!'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              );
+            },
+          );
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween(begin: 0.96, end: 1.0).animate(curved),
+              child: child,
             ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween(begin: 0.96, end: 1.0).animate(curved),
-            child: child,
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _personaLoading = false;
+        });
+      }
+    }
   }
 
   @override
