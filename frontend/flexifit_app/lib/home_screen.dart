@@ -13,6 +13,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
+  static const double _webMaxWidth = 720.0;
+
   late final TabController _tabController;
 
   final _chatKey = GlobalKey<ChatScreenState>();
@@ -39,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final isChatTab = _tabController.index == 0;
+    final isWideWeb = kIsWeb && MediaQuery.of(context).size.width >= 900;
 
     Widget content = TabBarView(
       controller: _tabController,
@@ -52,9 +55,9 @@ class _HomeScreenState extends State<HomeScreen>
       ],
     );
 
-    return Scaffold(
-      backgroundColor: kIsWeb ? Colors.grey.shade100 : null,
-      appBar: AppBar(
+    PreferredSizeWidget appBar;
+    if (!isWideWeb) {
+      appBar = AppBar(
         title: Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
         bottom: TabBar(
           controller: _tabController,
@@ -84,7 +87,69 @@ class _HomeScreenState extends State<HomeScreen>
                   _chatKey.currentState?.confirmAndClearConversation(),
             ),
         ],
-      ),
+      );
+    } else {
+      appBar = AppBar(
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        title: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _webMaxWidth),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
+                  ),
+                  if (isChatTab)
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      tooltip: 'Change Goal',
+                      onPressed: () => _chatKey.currentState?.showGoalDialog(),
+                    ),
+                  if (isChatTab)
+                    IconButton(
+                      icon: const Icon(Icons.mic),
+                      tooltip: 'Voice input',
+                      onPressed: () => _chatKey.currentState?.showVoiceSheet(),
+                    ),
+                  if (isChatTab)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Delete conversation',
+                      onPressed: () =>
+                          _chatKey.currentState?.confirmAndClearConversation(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight - 8),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _webMaxWidth),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.chat_bubble_outline), text: 'Chat'),
+                    Tab(icon: Icon(Icons.insights), text: 'Progress'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: kIsWeb ? Colors.grey.shade100 : null,
+      appBar: appBar,
       body: LayoutBuilder(
         builder: (context, constraints) {
           // For web on wide screens, constrain content width for readability.
@@ -92,12 +157,11 @@ class _HomeScreenState extends State<HomeScreen>
             return content;
           }
 
-          const maxWidth = 720.0;
           final height = constraints.maxHeight;
 
           return Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: maxWidth),
+              constraints: const BoxConstraints(maxWidth: _webMaxWidth),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: SizedBox(
