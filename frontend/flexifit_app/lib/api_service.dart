@@ -39,6 +39,20 @@ class ChatResult {
   });
 }
 
+class PersonaResult {
+  final String archetypeTitle;
+  final String description;
+  final String avatarId;
+  final int powerLevel;
+
+  const PersonaResult({
+    required this.archetypeTitle,
+    required this.description,
+    required this.avatarId,
+    required this.powerLevel,
+  });
+}
+
 class ApiService {
   static String get baseUrl {
     return AppConfig.apiBaseUrl;
@@ -201,5 +215,77 @@ class ApiService {
         (data is Map ? data['motivation']?.toString() : null) ?? '';
 
     return WeeklyMotivationResult(motivation: motivation);
+  }
+
+  static Future<PersonaResult> getPersona({
+    required String goal,
+    required int streak,
+    required double completionRate7d,
+    required List<Map<String, dynamic>> last7Days,
+    required List<Map<String, dynamic>> history,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/persona');
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'current_goal': goal,
+              'completion_rate_7d': completionRate7d,
+              'streak': streak,
+              'last7_days': last7Days
+                  .map((d) => {
+                        'date': d['date'],
+                        'done': d['done'] == true,
+                      })
+                  .toList(),
+              'chat_history': history
+                  .map((m) => {
+                        'role': m['role'],
+                        'text': m['text'],
+                      })
+                  .toList(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final data = decoded is Map ? decoded['data'] : null;
+
+      final title = (data is Map ? data['archetype_title']?.toString() : null) ??
+          'The Strategic Pengu';
+      final description =
+          (data is Map ? data['description']?.toString() : null) ??
+            "You're great at shrinking the goal while still moving forward. Slow and steady — consistency wins.";
+      final avatarId =
+          (data is Map ? data['avatar_id']?.toString() : null) ?? 'PENGU';
+      final power = data is Map && data['power_level'] is num
+          ? (data['power_level'] as num).toInt()
+          : 50;
+
+      return PersonaResult(
+        archetypeTitle: title.trim().isEmpty ? 'The Strategic Pengu' : title,
+        description: description.trim().isEmpty
+            ? "You're great at shrinking the goal while still moving forward. Slow and steady — consistency wins."
+            : description,
+        avatarId: avatarId,
+        powerLevel: power.clamp(1, 100),
+      );
+    } catch (e) {
+      debugPrint('ApiService.getPersona failed: $e');
+      return const PersonaResult(
+        archetypeTitle: 'The Strategic Pengu',
+        description:
+            "You're great at shrinking the goal while still moving forward. Slow and steady — consistency wins.",
+        avatarId: 'PENGU',
+        powerLevel: 50,
+      );
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 
 import 'api_service.dart';
 import 'progress_store.dart';
@@ -27,6 +28,9 @@ class ProgressScreenState extends State<ProgressScreen> {
 
   bool _dailyNudgeEnabled = false;
   TimeOfDay? _dailyNudgeTime;
+
+  PersonaResult? _cachedPersona;
+  bool _personaLoading = false;
 
   @override
   void initState() {
@@ -182,18 +186,24 @@ class ProgressScreenState extends State<ProgressScreen> {
         history: history,
       );
 
-      final motivationResult = await ApiService.getWeeklyMotivation(
-        goal: goal,
-        completionRate7d: rate7d,
-        last7Days: trend7d,
-      );
+      WeeklyMotivationResult? motivationResult;
+      try {
+        motivationResult = await ApiService.getWeeklyMotivation(
+          goal: goal,
+          completionRate7d: rate7d,
+          last7Days: trend7d,
+        );
+      } catch (e) {
+        debugPrint('Weekly motivation failed: $e');
+        motivationResult = null;
+      }
 
       if (!mounted) return;
       setState(() {
         _aiInsights = result.insights;
-        _weeklyMotivation = motivationResult.motivation.trim().isEmpty
+        _weeklyMotivation = (motivationResult?.motivation ?? '').trim().isEmpty
             ? null
-            : motivationResult.motivation.trim();
+            : motivationResult!.motivation.trim();
         _microHabitsOffered = result.microHabitsOffered;
         _lastSyncedAt = DateTime.now();
       });
@@ -210,6 +220,266 @@ class ProgressScreenState extends State<ProgressScreen> {
         });
       }
     }
+  }
+
+  String _assetForAvatar(String avatarId) {
+    switch (avatarId.trim().toUpperCase()) {
+      case 'KUNG_FU_FOX':
+        return 'assets/kungfu_fox.png';
+      case 'LION':
+        return 'assets/lion.png';
+      case 'NINJA_TURTLE':
+        return 'assets/ninja_turtle.png';
+      case 'SPORTY_CAT':
+        return 'assets/sporty_cat.png';
+      case 'WORKOUT_WOLF':
+        return 'assets/workout_wolf.png';
+      case 'PENGU':
+      default:
+        return 'assets/pengu.png';
+    }
+  }
+
+  Future<PersonaResult> _fetchPersona() async {
+    final goal = _goal ?? 'Stay Healthy';
+    final completions = await ProgressStore.getCompletions();
+    final trend7d = ProgressStore.last7DaysTrend(completions);
+    final rate7d = ProgressStore.completionRate7d(completions);
+    final streak = ProgressStore.computeStreak(completions);
+
+    final history = (await ProgressStore.getChatHistory())
+        .map((m) => {
+              'role': m['role'],
+              'text': m['text'],
+            })
+        .toList();
+
+    return ApiService.getPersona(
+      goal: goal,
+      streak: streak,
+      completionRate7d: rate7d,
+      last7Days: trend7d,
+      history: history,
+    );
+  }
+
+  Future<void> showPersonaDialog() async {
+    if (_personaLoading) return;
+
+    setState(() {
+      _personaLoading = true;
+    });
+
+    final persona = await _fetchPersona();
+
+    if (!mounted) return;
+    setState(() {
+      _cachedPersona = persona;
+      _personaLoading = false;
+    });
+
+    if (!mounted) return;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'persona',
+      barrierColor: Colors.black.withOpacity(0.75),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (context, _, __) {
+        final p = _cachedPersona ?? persona;
+        final asset = _assetForAvatar(p.avatarId);
+        final powerValue = (p.powerLevel / 100.0).clamp(0.0, 1.0);
+
+        return SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Material(
+                color: Colors.transparent,
+                child: Stack(
+                  children: [
+                    // Glow
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.tealAccent.withOpacity(0.20),
+                                blurRadius: 28,
+                                spreadRadius: 2,
+                              ),
+                              BoxShadow(
+                                color: Colors.teal.withOpacity(0.18),
+                                blurRadius: 48,
+                                spreadRadius: 6,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Card
+                    Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      clipBehavior: Clip.antiAlias,
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'IDENTITY UNLOCKED',
+                                    style: TextStyle(
+                                      letterSpacing: 1.2,
+                                      color: Colors.teal.shade800,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Close',
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(Icons.close),
+                                )
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Center(
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0.92, end: 1.0),
+                                duration: const Duration(milliseconds: 520),
+                                curve: Curves.easeOutBack,
+                                builder: (context, scale, child) => Transform.scale(
+                                  scale: scale,
+                                  child: child,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.shade50,
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(color: Colors.teal.shade100),
+                                  ),
+                                  child: Image.asset(
+                                    asset,
+                                    width: 140,
+                                    height: 140,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              p.archetypeTitle,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              p.description,
+                              style: TextStyle(
+                                color: Colors.grey.shade800,
+                                height: 1.25,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                const Icon(Icons.bolt, size: 18),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Power Level',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const Spacer(),
+                                Text('${p.powerLevel}/100'),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0.0, end: powerValue),
+                                duration: const Duration(milliseconds: 700),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, value, _) {
+                                  return LinearProgressIndicator(
+                                    minHeight: 10,
+                                    value: value,
+                                    backgroundColor: Colors.grey.shade200,
+                                    color: Colors.teal,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final text =
+                                          '${p.archetypeTitle}\n${p.description}\nPower: ${p.powerLevel}/100';
+                                      await Clipboard.setData(
+                                        ClipboardData(text: text),
+                                      );
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Copied to clipboard'),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.copy),
+                                    label: const Text('Copy'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: () => Navigator.pop(context),
+                                    icon: const Icon(Icons.check_circle),
+                                    label: const Text('Nice!'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.96, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   @override

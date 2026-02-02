@@ -86,6 +86,12 @@ class _HomeScreenState extends State<HomeScreen>
               onPressed: () =>
                   _chatKey.currentState?.confirmAndClearConversation(),
             ),
+          if (!isChatTab)
+            IconButton(
+              icon: const Icon(Icons.badge_outlined),
+              tooltip: 'See your Flexi Identity',
+              onPressed: () => _progressKey.currentState?.showPersonaDialog(),
+            ),
         ],
       );
     } else {
@@ -120,6 +126,13 @@ class _HomeScreenState extends State<HomeScreen>
                       tooltip: 'Delete conversation',
                       onPressed: () =>
                           _chatKey.currentState?.confirmAndClearConversation(),
+                    ),
+                  if (!isChatTab)
+                    IconButton(
+                      icon: const Icon(Icons.badge_outlined),
+                      tooltip: 'See your Flexi Identity',
+                      onPressed: () =>
+                          _progressKey.currentState?.showPersonaDialog(),
                     ),
                 ],
               ),
@@ -171,7 +184,13 @@ class _HomeScreenState extends State<HomeScreen>
                     borderRadius: BorderRadius.circular(16),
                     clipBehavior: Clip.antiAlias,
                     color: Theme.of(context).scaffoldBackgroundColor,
-                    child: content,
+                    child: MediaQuery(
+
+                      data: MediaQuery.of(context).copyWith(
+                        size: Size(_webMaxWidth, height - 32),
+                      ),
+                      child: content,
+                    ),
                   ),
                 ),
               ),

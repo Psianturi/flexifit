@@ -258,6 +258,26 @@ class WeeklyMotivationResponse(BaseModel):
     status: str
     data: WeeklyMotivationData
 
+
+class PersonaRequest(BaseModel):
+    current_goal: str
+    completion_rate_7d: float = 0.0
+    streak: int = 0
+    last7_days: List[DayCompletion] = []
+    chat_history: List[ChatMessage] = []
+
+
+class PersonaData(BaseModel):
+    archetype_title: str
+    description: str
+    avatar_id: str
+    power_level: int
+
+
+class PersonaResponse(BaseModel):
+    status: str
+    data: PersonaData
+
 # AI wrapper function with enhanced Opik tracking
 @track(
     name="flexifit_negotiation",
@@ -567,6 +587,102 @@ def call_gemini_weekly_motivation(
         raise ValueError("Empty weekly motivation")
     return text
 
+
+_ALLOWED_AVATAR_IDS = {
+    "KUNG_FU_FOX",
+    "LION",
+    "NINJA_TURTLE",
+    "PENGU",
+    "SPORTY_CAT",
+    "WORKOUT_WOLF",
+}
+
+
+@track(
+    name="flexifit_persona",
+    tags=["persona", "gamification", "hyper-personalized"],
+    metadata={
+        "model": GEMINI_MODEL,
+        "prompt_version": PROMPT_VERSION,
+        "feature": "flexi-archetype",
+    },
+)
+def call_gemini_persona(payload: PersonaRequest) -> dict:
+    """Generate a 'Flexi Archetype' persona as strict JSON."""
+
+    done_days = sum(1 for d in payload.last7_days if bool(d.done))
+    total_days = max(1, len(payload.last7_days))
+
+    days_compact = ", ".join(
+        [f"{d.date}:{'done' if d.done else 'miss'}" for d in payload.last7_days]
+    )
+
+    transcript = "\n".join(
+        [f"{m.role.upper()}: {m.text}" for m in (payload.chat_history or [])[-20:]]
+    )
+
+    prompt = (
+        "You are a witty but supportive habit-coach game designer. "
+        "Analyze the user data and generate a playful, slightly 'nyeleneh' RPG-style persona. "
+        "Be motivating, not insulting. Keep it punchy.\n"
+        "Return STRICT JSON only (no markdown, no extra text).\n"
+        "Schema: {\"archetype_title\": string, \"description\": string, \"avatar_id\": string, \"power_level\": integer}.\n"
+        "Rules:\n"
+        f"- avatar_id MUST be exactly one of: {sorted(_ALLOWED_AVATAR_IDS)}\n"
+        "- archetype_title: 2-5 words, English (funny, punchy).\n"
+        "- description: 1-2 short sentences in English, funny but supportive.\n"
+        "- power_level: 1..100 (higher = more consistent).\n\n"
+        f"GOAL: {payload.current_goal}\n"
+        f"COMPLETION_RATE_7D: {float(payload.completion_rate_7d):.0f}%\n"
+        f"STREAK_DAYS: {int(payload.streak)}\n"
+        f"DONE_DAYS: {done_days}/{total_days}\n"
+        f"LAST_7_DAYS: {days_compact}\n\n"
+        f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n"
+    )
+
+    response = model.generate_content(
+        prompt,
+        request_options={"timeout": 12},
+    )
+
+    raw = (response.text or "").strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        raw = raw[start : end + 1]
+
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("Persona output must be a JSON object")
+
+    title = str(data.get("archetype_title") or "").strip()
+    desc = str(data.get("description") or "").strip()
+    avatar_id = str(data.get("avatar_id") or "").strip().upper()
+
+    power_level = data.get("power_level")
+    if isinstance(power_level, bool):
+        power_level = 50
+    if not isinstance(power_level, (int, float)):
+        power_level = 50
+    power_level = int(round(float(power_level)))
+    power_level = max(1, min(100, power_level))
+
+    if avatar_id not in _ALLOWED_AVATAR_IDS:
+        # Safe fallback mapping.
+        avatar_id = "PENGU"
+
+    if not title:
+        title = "The Strategic Pengu"
+    if not desc:
+        desc = "You're great at shrinking the goal while still moving forward. Slow and steady — consistency wins."
+
+    return {
+        "archetype_title": title,
+        "description": desc,
+        "avatar_id": avatar_id,
+        "power_level": power_level,
+    }
+
 @app.get("/")
 async def root():
     return {
@@ -739,15 +855,19 @@ async def weekly_motivation_endpoint(
         # Clamp to sane range to avoid prompt injection via absurd numbers.
         rate = float(max(0.0, min(100.0, request.completion_rate_7d)))
 
-        motivation = call_gemini_weekly_motivation(
-            goal=request.goal,
-            completion_rate_7d=rate,
-            last7_days=request.last7_days,
-        )
+        try:
+            motivation = call_gemini_weekly_motivation(
+                goal=request.goal,
+                completion_rate_7d=rate,
+                last7_days=request.last7_days,
+            )
+        except Exception as e:
+            logger.warning(f"⚠ Weekly motivation fallback (Gemini unavailable): {e}")
+            motivation = "Keep it tiny today—one small action keeps the habit alive."
 
         # Fallback if model returns something unexpected.
         if not motivation or not str(motivation).strip():
-            motivation = "Tetap jalan hari ini—konsistensi kecil mengalahkan niat besar."
+            motivation = "Keep it tiny today—one small action keeps the habit alive."
 
         return WeeklyMotivationResponse(
             status="success",
@@ -759,6 +879,35 @@ async def weekly_motivation_endpoint(
     except Exception as e:
         logger.error(f"🔥 Error in /progress/motivation: {str(e)}")
         raise HTTPException(status_code=500, detail="Motivation generation failed")
+
+
+@app.post("/persona", response_model=PersonaResponse)
+async def persona_endpoint(request: PersonaRequest) -> PersonaResponse:
+    try:
+        if not request.current_goal.strip():
+            raise HTTPException(status_code=400, detail="Goal must be set")
+
+        # Clamp to sane ranges.
+        rate = float(max(0.0, min(100.0, request.completion_rate_7d)))
+        request.completion_rate_7d = rate
+        request.streak = int(max(0, min(3650, request.streak)))
+
+        persona = call_gemini_persona(request)
+
+        data = PersonaData(
+            archetype_title=str(persona.get("archetype_title") or "").strip(),
+            description=str(persona.get("description") or "").strip(),
+            avatar_id=str(persona.get("avatar_id") or "").strip(),
+            power_level=int(persona.get("power_level") or 50),
+        )
+
+        return PersonaResponse(status="success", data=data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"🔥 Error in /persona: {str(e)}")
+        raise HTTPException(status_code=500, detail="Persona generation failed")
 
 
 if __name__ == "__main__":
