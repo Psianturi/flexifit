@@ -113,57 +113,26 @@ You do **not** need Flutter installed on Vercel.
 
 #### 2) Add GitHub Actions secrets (one-time)
 In GitHub: **Settings → Secrets and variables → Actions → Secrets**, add:
-- `VERCEL_TOKEN` (used by GitHub Actions to authenticate to Vercel)
-
-Then choose ONE of these modes:
-
-**Mode A (recommended for Team/org projects):**
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
-
-**Mode B (simpler, usually fine for Personal accounts):**
-- `VERCEL_PROJECT_NAME` (example: `flexifit`)
-- (optional) `VERCEL_SCOPE` (team slug or username; only needed if you deploy under a Team)
+- `VERCEL_TOKEN` (Vercel access token for GitHub Actions)
+- `VERCEL_PROJECT_NAME` (your Vercel project name/slug, e.g. `flexifit`)
+- `VERCEL_SCOPE` (optional: team slug/username, e.g. `psianturis-projects`)
 
 Important: these are **NOT** the same as app/runtime environment variables.
 
-- `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are only for **GitHub Actions → Vercel deployment authentication + selecting the target Vercel project**.
+- `VERCEL_*` secrets are only for **GitHub Actions → Vercel deployment authentication + selecting the target Vercel project**.
 - Things like **Gemini API key** belong to the backend (Railway) and are set in Railway variables.
 - Things like **API base URL** for the Flutter app are set as **GitHub Actions Variables** and baked into the web build via `--dart-define`.
 
 So: you do **not** put `VERCEL_TOKEN` etc into Vercel “Environment Variables” for the app. They live in **GitHub Secrets** so CI can deploy.
 
-If your GitHub Actions log shows `VERCEL_ORG_ID:` and `VERCEL_PROJECT_ID:` empty, it means the secrets were not added (or were added in the wrong place). Add them in **Actions → Secrets**.
-
-How to get `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` (recommended):
-```bash
-cd frontend/flexifit_app
-npm i -g vercel
-vercel login
-vercel link
-
-# after linking, read IDs from:
-# .vercel/project.json
-```
-
-What is inside `.vercel/project.json` (example):
-```json
-{
-	"orgId": "team_xxxxxxxxxxxxxxxxx",
-	"projectId": "prj_xxxxxxxxxxxxxxxxx"
-}
-```
-
 How to get `VERCEL_TOKEN`:
 - Vercel Dashboard → your **Avatar/Profile** → **Settings** → **Tokens** → create a token.
 
-How to pick `VERCEL_PROJECT_NAME` (Mode B):
-- This is the **Vercel project slug/name** (example: `flexifit`).
-- This is NOT the same as the domain you show to users. Your public domain can be changed in Vercel → **Domains** (example: `flexifit-encode.vercel.app`).
+How to pick `VERCEL_PROJECT_NAME`:
+- This is the **Vercel project name/slug** (example: `flexifit`).
+- Your public domain can be changed in Vercel → **Domains** (example: `flexifit-encode.vercel.app`).
 
-Alternative (Dashboard):
-- Vercel Dashboard → your Project → **Settings → General** → copy **Project ID**
-- For `VERCEL_ORG_ID`: open **Team/Account settings** (or use the `.vercel/project.json` method above)
+If you deploy under a Team, set `VERCEL_SCOPE` to the team slug (example: `psianturis-projects`).
 
 Tip: do **not** commit the `.vercel/` folder to git.
 
@@ -183,6 +152,7 @@ Note: `--dart-define` is **build-time** for Flutter Web. Changing Vercel environ
 Notes:
 - Flutter Web is a single-page app; we include a `vercel.json` route rule to rewrite unknown routes to `index.html`.
 - If your backend restricts CORS origins, add your Vercel domain to backend `CORS_ORIGINS`.
+- In Vercel project settings, keep **Root Directory** empty when using GitHub Actions + Vercel CLI to deploy prebuilt static files.
 
 Common gotchas on web:
 - Make sure backend **CORS** allows your Vercel domain.
