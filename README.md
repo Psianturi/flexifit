@@ -114,8 +114,16 @@ You do **not** need Flutter installed on Vercel.
 #### 2) Add GitHub Actions secrets (one-time)
 In GitHub: **Settings → Secrets and variables → Actions → Secrets**, add:
 - `VERCEL_TOKEN` (used by GitHub Actions to authenticate to Vercel)
-- `VERCEL_ORG_ID` (tells GitHub Actions which Vercel team/org to deploy into)
-- `VERCEL_PROJECT_ID` (tells GitHub Actions which Vercel project to deploy)
+
+Then choose ONE of these modes:
+
+**Mode A (recommended for Team/org projects):**
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+**Mode B (simpler, usually fine for Personal accounts):**
+- `VERCEL_PROJECT_NAME` (example: `flexifit-black`)
+- (optional) `VERCEL_SCOPE` (team slug or username; only needed if you deploy under a Team)
 
 Important: these are **NOT** the same as app/runtime environment variables.
 
@@ -124,6 +132,8 @@ Important: these are **NOT** the same as app/runtime environment variables.
 - Things like **API base URL** for the Flutter app are set as **GitHub Actions Variables** and baked into the web build via `--dart-define`.
 
 So: you do **not** put `VERCEL_TOKEN` etc into Vercel “Environment Variables” for the app. They live in **GitHub Secrets** so CI can deploy.
+
+If your GitHub Actions log shows `VERCEL_ORG_ID:` and `VERCEL_PROJECT_ID:` empty, it means the secrets were not added (or were added in the wrong place). Add them in **Actions → Secrets**.
 
 How to get `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` (recommended):
 ```bash
@@ -147,6 +157,9 @@ What is inside `.vercel/project.json` (example):
 How to get `VERCEL_TOKEN`:
 - Vercel Dashboard → your **Avatar/Profile** → **Settings** → **Tokens** → create a token.
 
+How to pick `VERCEL_PROJECT_NAME` (Mode B):
+- This is the **project name** as shown in Vercel (it becomes `<project-name>.vercel.app`).
+
 Alternative (Dashboard):
 - Vercel Dashboard → your Project → **Settings → General** → copy **Project ID**
 - For `VERCEL_ORG_ID`: open **Team/Account settings** (or use the `.vercel/project.json` method above)
@@ -169,11 +182,6 @@ Note: `--dart-define` is **build-time** for Flutter Web. Changing Vercel environ
 Notes:
 - Flutter Web is a single-page app; we include a `vercel.json` route rule to rewrite unknown routes to `index.html`.
 - If your backend restricts CORS origins, add your Vercel domain to backend `CORS_ORIGINS`.
-
-#### Will the app still work as a static site?
-Yes. Flutter Web builds into a client-side single-page app (static HTML/CSS/JS). Features remain active because:
-- **Chat / persona / insights**: still call your backend over HTTPS (`API_BASE_URL`).
-- **Journey history / streak / local state**: stored in the browser (SharedPreferences → browser storage). It will persist on the same browser/device, but it won’t sync across devices unless you add a real database/auth later.
 
 Common gotchas on web:
 - Make sure backend **CORS** allows your Vercel domain.
