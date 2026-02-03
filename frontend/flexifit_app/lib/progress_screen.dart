@@ -70,8 +70,6 @@ class ProgressScreenState extends State<ProgressScreen> {
     'banget',
   };
 
-
-
   @override
   void initState() {
     super.initState();
@@ -375,6 +373,9 @@ class ProgressScreenState extends State<ProgressScreen> {
       _personaLoading = true;
     });
 
+    final completedGoals = await ProgressStore.getCompletedGoalsCount();
+    final isLegendary = completedGoals >= 3;
+
     final personaFuture = _fetchPersona().then((persona) {
       if (mounted) {
         setState(() {
@@ -415,8 +416,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                                     borderRadius: BorderRadius.circular(22),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: _cOpacity(
-                                            Colors.tealAccent, 0.20),
+                                        color:
+                                            _cOpacity(Colors.tealAccent, 0.20),
                                         blurRadius: 28,
                                         spreadRadius: 2,
                                       ),
@@ -546,6 +547,9 @@ class ProgressScreenState extends State<ProgressScreen> {
 
               final asset = _assetForAvatar(p.avatarId);
               final powerValue = (p.powerLevel / 100.0).clamp(0.0, 1.0);
+              final title = isLegendary
+                  ? 'Legendary ${p.archetypeTitle}'
+                  : p.archetypeTitle;
 
               return SafeArea(
                 child: Center(
@@ -563,8 +567,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                   borderRadius: BorderRadius.circular(22),
                                   boxShadow: [
                                     BoxShadow(
-                                        color: _cOpacity(
-                                          Colors.tealAccent, 0.20),
+                                      color: _cOpacity(Colors.tealAccent, 0.20),
                                       blurRadius: 28,
                                       spreadRadius: 2,
                                     ),
@@ -627,7 +630,10 @@ class ProgressScreenState extends State<ProgressScreen> {
                                           borderRadius:
                                               BorderRadius.circular(18),
                                           border: Border.all(
-                                              color: Colors.teal.shade100),
+                                              color: isLegendary
+                                                  ? Colors.amber.shade400
+                                                  : Colors.teal.shade100,
+                                              width: isLegendary ? 2 : 1),
                                         ),
                                         child: Image.asset(
                                           asset,
@@ -640,7 +646,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                   ),
                                   const SizedBox(height: 14),
                                   Text(
-                                    p.archetypeTitle,
+                                    title,
                                     style: const TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
@@ -857,9 +863,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _nightModeEnabled
-                      ? 'Dark mode is ON.'
-                      : 'Dark mode is OFF.',
+                  _nightModeEnabled ? 'Dark mode is ON.' : 'Dark mode is OFF.',
                   style: TextStyle(color: Colors.grey.shade700),
                 ),
               ],
@@ -933,7 +937,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                        color: _cOpacity(
+                      color: _cOpacity(
                           Theme.of(context).colorScheme.primary, 0.08),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
@@ -969,7 +973,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                     'Last synced: ${_lastSyncedAt!.hour.toString().padLeft(2, '0')}:${_lastSyncedAt!.minute.toString().padLeft(2, '0')}',
                     style: TextStyle(
                       fontSize: 12,
-                        color: _cOpacity(
+                      color: _cOpacity(
                           Theme.of(context).colorScheme.onSurface, 0.65),
                     ),
                   ),
@@ -1230,9 +1234,8 @@ class _TrendCard extends StatelessWidget {
                                   ],
                                 )
                               : null,
-                          color: done
-                              ? null
-                              : _cOpacity(scheme.onSurface, 0.10),
+                          color:
+                              done ? null : _cOpacity(scheme.onSurface, 0.10),
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),

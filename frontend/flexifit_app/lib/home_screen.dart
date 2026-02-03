@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import 'chat_screen.dart';
+import 'journey_history_screen.dart';
 import 'progress_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -96,6 +97,16 @@ class _HomeScreenState extends State<HomeScreen>
               tooltip: 'See your Flexi Identity',
               onPressed: () => _progressKey.currentState?.showPersonaDialog(),
             ),
+          if (!isChatTab)
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'Journey history',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const JourneyHistoryScreen(),
+                ),
+              ),
+            ),
         ],
       );
     } else {
@@ -138,6 +149,16 @@ class _HomeScreenState extends State<HomeScreen>
                       tooltip: 'See your Flexi Identity',
                       onPressed: () =>
                           _progressKey.currentState?.showPersonaDialog(),
+                    ),
+                  if (!isChatTab)
+                    IconButton(
+                      icon: const Icon(Icons.history),
+                      tooltip: 'Journey history',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const JourneyHistoryScreen(),
+                        ),
+                      ),
                     ),
                 ],
               ),

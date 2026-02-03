@@ -2,10 +2,14 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'goal_model.dart';
+
 class ProgressStore {
   static const String goalKey = 'daily_goal';
   static const String completionsKey = 'completions_by_date';
   static const String chatHistoryKey = 'chat_history_v1';
+
+  static const String goalHistoryKey = 'goal_history_v1';
 
   static const String dailyNudgeEnabledKey = 'daily_nudge_enabled_v1';
   static const String dailyNudgeHourKey = 'daily_nudge_hour_v1';
@@ -34,6 +38,211 @@ class ProgressStore {
   static Future<void> setGoal(String goal) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(goalKey, goal);
+  }
+
+  static Future<List<GoalModel>> getGoalHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(goalHistoryKey);
+
+    if (raw != null && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final items = decoded
+              .whereType<Map>()
+              .map((e) => GoalModel.fromJson(Map<String, dynamic>.from(e)))
+              .where((g) => g.title.trim().isNotEmpty)
+              .toList(growable: false);
+
+          // Newest-first is expected by UI.
+          items.sort((a, b) => b.startDate.compareTo(a.startDate));
+          return items;
+        }
+      } catch (_) {
+        // Fall through to migration/empty.
+      }
+    }
+
+    // Migration / seeding:
+    // - If legacy daily_goal exists but history is missing, seed 1 active entry.
+    final legacyGoal = prefs.getString(goalKey);
+    if (legacyGoal != null && legacyGoal.trim().isNotEmpty) {
+      final seeded = [
+        GoalModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          title: legacyGoal.trim(),
+          startDate: DateTime.now(),
+          endDate: null,
+          status: GoalStatus.active,
+          finalStreak: 0,
+        ),
+      ];
+      await setGoalHistory(seeded);
+      return seeded;
+    }
+
+    return const [];
+  }
+
+  static Future<void> setGoalHistory(List<GoalModel> history) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final cleaned = history
+        .where((g) => g.title.trim().isNotEmpty)
+        .map((g) => g.copyWith(title: g.title.trim()))
+        .toList(growable: false);
+
+    // Newest-first.
+    cleaned.sort((a, b) => b.startDate.compareTo(a.startDate));
+
+    await prefs.setString(
+      goalHistoryKey,
+      jsonEncode(cleaned.map((g) => g.toJson()).toList(growable: false)),
+    );
+  }
+
+  static Future<GoalModel?> getActiveGoal() async {
+    final history = await getGoalHistory();
+    try {
+      return history.firstWhere((g) => g.status == GoalStatus.active);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> startNewGoal(
+      {required String title, DateTime? now}) async {
+    final newTitle = title.trim();
+    if (newTitle.isEmpty) return;
+
+    final when = now ?? DateTime.now();
+    final history = await getGoalHistory();
+    final active = await getActiveGoal();
+    if (active != null && active.title.trim() == newTitle) {
+      await setGoal(newTitle);
+      return;
+    }
+
+    final updated = <GoalModel>[
+      GoalModel(
+        id: when.millisecondsSinceEpoch.toString(),
+        title: newTitle,
+        startDate: when,
+        endDate: null,
+        status: GoalStatus.active,
+        finalStreak: 0,
+      ),
+      ...history.where((g) => g.status != GoalStatus.active),
+    ];
+
+    await setGoalHistory(updated);
+    await setGoal(newTitle);
+  }
+
+  static Future<void> transitionGoal({
+    required String newTitle,
+    required String previousStatus,
+    required int finalStreak,
+    DateTime? now,
+  }) async {
+    final next = newTitle.trim();
+    if (next.isEmpty) return;
+
+    final when = now ?? DateTime.now();
+    final history = await getGoalHistory();
+
+    final normalizedStatus = GoalStatus.normalize(previousStatus);
+    final archivedStatus = normalizedStatus == GoalStatus.completed
+        ? GoalStatus.completed
+        : GoalStatus.dropped;
+
+    final updated = <GoalModel>[];
+
+    bool archivedOne = false;
+    for (final g in history) {
+      if (!archivedOne && g.status == GoalStatus.active) {
+        updated.add(
+          g.copyWith(
+            status: archivedStatus,
+            endDate: when,
+            finalStreak: finalStreak,
+          ),
+        );
+        archivedOne = true;
+        continue;
+      }
+      if (g.status == GoalStatus.active) {
+        // Keep only one active.
+        continue;
+      }
+      updated.add(g);
+    }
+
+    // Insert new active at top.
+    updated.insert(
+      0,
+      GoalModel(
+        id: when.millisecondsSinceEpoch.toString(),
+        title: next,
+        startDate: when,
+        endDate: null,
+        status: GoalStatus.active,
+        finalStreak: 0,
+      ),
+    );
+
+    await setGoalHistory(updated);
+    await setGoal(next);
+  }
+
+  static Future<int> getCompletedGoalsCount() async {
+    final history = await getGoalHistory();
+    return history.where((g) => g.status == GoalStatus.completed).length;
+  }
+
+  static Future<void> generateFakeGoalHistoryForDemo() async {
+    final now = DateTime.now();
+
+    final active = GoalModel(
+      id: now.millisecondsSinceEpoch.toString(),
+      title: 'Build a 2-minute stretch habit',
+      startDate: now.subtract(const Duration(days: 1)),
+      endDate: null,
+      status: GoalStatus.active,
+      finalStreak: 0,
+    );
+
+    final completed1 = GoalModel(
+      id: (now.millisecondsSinceEpoch - 1).toString(),
+      title: 'Bangun Pagi',
+      startDate: now.subtract(const Duration(days: 30)),
+      endDate: now.subtract(const Duration(days: 18)),
+      status: GoalStatus.completed,
+      finalStreak: 12,
+    );
+
+    final dropped = GoalModel(
+      id: (now.millisecondsSinceEpoch - 2).toString(),
+      title: 'Baca Buku',
+      startDate: now.subtract(const Duration(days: 17)),
+      endDate: now.subtract(const Duration(days: 14)),
+      status: GoalStatus.dropped,
+      finalStreak: 2,
+    );
+
+    final completed2 = GoalModel(
+      id: (now.millisecondsSinceEpoch - 3).toString(),
+      title: 'No Sugar',
+      startDate: now.subtract(const Duration(days: 13)),
+      endDate: now.subtract(const Duration(days: 6)),
+      status: GoalStatus.completed,
+      finalStreak: 7,
+    );
+
+    // Newest-first.
+    final history = [active, completed2, dropped, completed1];
+    await setGoalHistory(history);
+    await setGoal(active.title);
   }
 
   static Future<Map<String, bool>> getCompletions() async {

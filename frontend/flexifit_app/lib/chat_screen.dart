@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
 import 'api_service.dart';
+import 'goal_model.dart';
 import 'progress_store.dart';
 import 'app_config.dart';
 
@@ -357,12 +358,76 @@ class ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _saveGoal(String goal) async {
-    await ProgressStore.setGoal(goal);
+    final newGoal = goal.trim();
+    if (newGoal.isEmpty) return;
+
+    final current = (_userGoal ?? '').trim();
+    if (current.isEmpty) {
+      await ProgressStore.startNewGoal(title: newGoal);
+      setState(() {
+        _userGoal = newGoal;
+      });
+      _addBotMessage(
+          "Great! Your goal: \"$newGoal\". Tell me, how are you feeling right now?");
+      return;
+    }
+
+    if (current.toLowerCase() == newGoal.toLowerCase()) {
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      return;
+    }
+
+    await _confirmArchiveAndSetNewGoal(previousGoal: current, newGoal: newGoal);
+  }
+
+  Future<void> _confirmArchiveAndSetNewGoal({
+    required String previousGoal,
+    required String newGoal,
+  }) async {
+    final status = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Before we switch goals…'),
+        content: Text(
+          'How would you mark your previous goal?\n\n"$previousGoal"',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, GoalStatus.dropped),
+            child: const Text('Dropped / Archive'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, GoalStatus.completed),
+            child: const Text('Conquered!'),
+          ),
+        ],
+      ),
+    );
+
+    if (status == null) return;
+
+    final completions = await ProgressStore.getCompletions();
+    final finalStreak = ProgressStore.computeStreak(completions);
+
+    await ProgressStore.transitionGoal(
+      newTitle: newGoal,
+      previousStatus: status,
+      finalStreak: finalStreak,
+    );
+
+    if (!mounted) return;
     setState(() {
-      _userGoal = goal;
+      _userGoal = newGoal;
     });
+
     _addBotMessage(
-        "Great! Your goal: \"$goal\". Tell me, how are you feeling right now?");
+        "New journey started! Your goal: \"$newGoal\". How are you feeling today?");
   }
 
   void _addBotMessage(String text) {
@@ -420,7 +485,6 @@ class ChatScreenState extends State<ChatScreen>
       history: historyPayload,
     );
 
-    // Debug-only: keep judge metrics in memory (not persisted in chat history).
     _lastEmpathyScore = result.empathyScore;
     _lastEmpathyRationale = result.empathyRationale;
     _lastRetryUsed = result.retryUsed;
@@ -735,7 +799,8 @@ class ChatScreenState extends State<ChatScreen>
                             if (user.id == _aiUser.id) {
                               return CircleAvatar(
                                 radius: 16,
-                                backgroundColor: Colors.teal.withValues(alpha: 0.12),
+                                backgroundColor:
+                                    Colors.teal.withValues(alpha: 0.12),
                                 child: Icon(
                                   Icons.smart_toy_outlined,
                                   size: 18,
