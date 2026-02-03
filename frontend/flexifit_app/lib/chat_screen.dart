@@ -163,6 +163,12 @@ class ChatScreenState extends State<ChatScreen>
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
+    final goal = (_userGoal ?? '').trim();
+    if (goal.isEmpty) {
+      showGoalDialog();
+      return;
+    }
+
     final message = ChatMessage(
       user: _currentUser,
       createdAt: DateTime.now(),
@@ -373,7 +379,6 @@ class ChatScreenState extends State<ChatScreen>
     }
 
     if (current.toLowerCase() == newGoal.toLowerCase()) {
-
       if (!mounted) return;
       Navigator.pop(context);
       return;

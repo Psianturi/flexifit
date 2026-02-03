@@ -37,30 +37,86 @@ class ProgressStore {
 
   static Future<void> setGoal(String goal) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(goalKey, goal);
+    final trimmed = goal.trim();
+    await prefs.setString(goalKey, trimmed);
+
+    await _seedGoalHistoryIfMissing(trimmed);
+  }
+
+  static Future<void> _seedGoalHistoryIfMissing(String goal,
+      {DateTime? now}) async {
+    if (goal.trim().isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(goalHistoryKey);
+    if (raw != null && raw.trim().isNotEmpty) return;
+
+    final when = now ?? DateTime.now();
+    final seeded = [
+      GoalModel(
+        id: when.millisecondsSinceEpoch.toString(),
+        title: goal.trim(),
+        startDate: when,
+        endDate: null,
+        status: GoalStatus.active,
+        finalStreak: 0,
+      ),
+    ];
+    await setGoalHistory(seeded);
   }
 
   static Future<List<GoalModel>> getGoalHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(goalHistoryKey);
 
+    Map<String, dynamic> stringKeyedMap(Map input) {
+      return input.map((key, value) => MapEntry(key.toString(), value));
+    }
+
     if (raw != null && raw.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
-          final items = decoded
-              .whereType<Map>()
-              .map((e) => GoalModel.fromJson(Map<String, dynamic>.from(e)))
-              .where((g) => g.title.trim().isNotEmpty)
-              .toList(growable: false);
+          final items = <GoalModel>[];
+          for (final e in decoded) {
+            if (e is! Map) continue;
+            try {
+              final map = stringKeyedMap(e);
+              final goal = GoalModel.fromJson(map);
+              if (goal.title.trim().isEmpty) continue;
+              items.add(goal);
+            } catch (_) {}
+          }
+
+          if (items.isEmpty) {
+            throw const FormatException('No valid goals parsed');
+          }
 
           // Newest-first is expected by UI.
           items.sort((a, b) => b.startDate.compareTo(a.startDate));
+
+          final legacyGoal = (prefs.getString(goalKey) ?? '').trim();
+          final hasActive = items.any((g) => g.status == GoalStatus.active);
+          if (!hasActive && legacyGoal.isNotEmpty) {
+            final when = DateTime.now();
+            final updated = <GoalModel>[
+              GoalModel(
+                id: when.millisecondsSinceEpoch.toString(),
+                title: legacyGoal,
+                startDate: when,
+                endDate: null,
+                status: GoalStatus.active,
+                finalStreak: 0,
+              ),
+              ...items,
+            ];
+            await setGoalHistory(updated);
+            return updated;
+          }
+
           return items;
         }
-      } catch (_) {
-        // Fall through to migration/empty.
-      }
+      } catch (_) {}
     }
 
     // Migration / seeding:
@@ -77,7 +133,10 @@ class ProgressStore {
           finalStreak: 0,
         ),
       ];
-      await setGoalHistory(seeded);
+      // If history key is truly missing, persist seeded history.
+      if (raw == null || raw.trim().isEmpty) {
+        await setGoalHistory(seeded);
+      }
       return seeded;
     }
 
@@ -92,7 +151,6 @@ class ProgressStore {
         .map((g) => g.copyWith(title: g.title.trim()))
         .toList(growable: false);
 
-    // Newest-first.
     cleaned.sort((a, b) => b.startDate.compareTo(a.startDate));
 
     await prefs.setString(
@@ -198,51 +256,6 @@ class ProgressStore {
   static Future<int> getCompletedGoalsCount() async {
     final history = await getGoalHistory();
     return history.where((g) => g.status == GoalStatus.completed).length;
-  }
-
-  static Future<void> generateFakeGoalHistoryForDemo() async {
-    final now = DateTime.now();
-
-    final active = GoalModel(
-      id: now.millisecondsSinceEpoch.toString(),
-      title: 'Build a 2-minute stretch habit',
-      startDate: now.subtract(const Duration(days: 1)),
-      endDate: null,
-      status: GoalStatus.active,
-      finalStreak: 0,
-    );
-
-    final completed1 = GoalModel(
-      id: (now.millisecondsSinceEpoch - 1).toString(),
-      title: 'Bangun Pagi',
-      startDate: now.subtract(const Duration(days: 30)),
-      endDate: now.subtract(const Duration(days: 18)),
-      status: GoalStatus.completed,
-      finalStreak: 12,
-    );
-
-    final dropped = GoalModel(
-      id: (now.millisecondsSinceEpoch - 2).toString(),
-      title: 'Baca Buku',
-      startDate: now.subtract(const Duration(days: 17)),
-      endDate: now.subtract(const Duration(days: 14)),
-      status: GoalStatus.dropped,
-      finalStreak: 2,
-    );
-
-    final completed2 = GoalModel(
-      id: (now.millisecondsSinceEpoch - 3).toString(),
-      title: 'No Sugar',
-      startDate: now.subtract(const Duration(days: 13)),
-      endDate: now.subtract(const Duration(days: 6)),
-      status: GoalStatus.completed,
-      finalStreak: 7,
-    );
-
-    // Newest-first.
-    final history = [active, completed2, dropped, completed1];
-    await setGoalHistory(history);
-    await setGoal(active.title);
   }
 
   static Future<Map<String, bool>> getCompletions() async {

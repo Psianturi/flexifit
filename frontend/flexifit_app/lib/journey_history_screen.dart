@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'app_config.dart';
 import 'goal_model.dart';
 import 'progress_store.dart';
 
@@ -15,6 +14,16 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
   bool _loading = true;
   String _filter = 'all';
   List<GoalModel> _history = const [];
+  String? _currentGoal;
+
+  void _setFilter(String next) {
+    if (_filter == next) return;
+    setState(() {
+      _filter = next;
+    });
+
+    _reload();
+  }
 
   @override
   void initState() {
@@ -27,13 +36,40 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
       _loading = true;
     });
 
+    final goal = await ProgressStore.getGoal();
     final history = await ProgressStore.getGoalHistory();
 
     if (!mounted) return;
     setState(() {
       _history = history;
+      _currentGoal = goal?.trim();
       _loading = false;
     });
+  }
+
+  List<GoalModel> get _displayList {
+    final items = _filtered;
+    if (_filter != 'all') return items;
+
+    final current = (_currentGoal ?? '').trim();
+    if (current.isEmpty) return items;
+
+    final hasMatchingActive = items.any((g) =>
+        g.status == GoalStatus.active &&
+        g.title.trim().toLowerCase() == current.toLowerCase());
+    if (hasMatchingActive) return items;
+
+    return [
+      GoalModel(
+        id: 'legacy_active',
+        title: current,
+        startDate: DateTime.now(),
+        endDate: null,
+        status: GoalStatus.active,
+        finalStreak: 0,
+      ),
+      ...items,
+    ];
   }
 
   List<GoalModel> get _filtered {
@@ -97,49 +133,12 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
     return '$y-$m-$d';
   }
 
-  Future<void> _confirmGenerateFakeHistory() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Generate sample journey?'),
-        content: const Text(
-          'This will overwrite your saved goal timeline on this device.\n\nUse only for demo/screenshots.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Generate'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-    await ProgressStore.generateFakeGoalHistoryForDemo();
-    await _reload();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final canGenerateFake = AppConfig.showDebugEvals;
-
     return Scaffold(
       appBar: AppBar(
-        title: GestureDetector(
-          onLongPress: canGenerateFake ? _confirmGenerateFakeHistory : null,
-          child: const Text('Your Journey'),
-        ),
+        title: const Text('Your Journey'),
         actions: [
-          if (canGenerateFake)
-            IconButton(
-              tooltip: 'Generate sample journey',
-              icon: const Icon(Icons.auto_awesome),
-              onPressed: _confirmGenerateFakeHistory,
-            ),
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
@@ -151,6 +150,26 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if ((_currentGoal ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade100),
+                      ),
+                      child: Text(
+                        'Current goal: ${_currentGoal!}',
+                        style: TextStyle(
+                          color: Colors.teal.shade900,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Wrap(
@@ -159,25 +178,24 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
                       ChoiceChip(
                         label: const Text('All'),
                         selected: _filter == 'all',
-                        onSelected: (_) => setState(() => _filter = 'all'),
+                        onSelected: (_) => _setFilter('all'),
                       ),
                       ChoiceChip(
                         label: const Text('Completed'),
                         selected: _filter == 'completed',
-                        onSelected: (_) =>
-                            setState(() => _filter = 'completed'),
+                        onSelected: (_) => _setFilter('completed'),
                       ),
                       ChoiceChip(
                         label: const Text('Failed'),
                         selected: _filter == 'dropped',
-                        onSelected: (_) => setState(() => _filter = 'dropped'),
+                        onSelected: (_) => _setFilter('dropped'),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: _filtered.isEmpty
+                  child: _displayList.isEmpty
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(24),
@@ -189,13 +207,13 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                          itemCount: _filtered.length,
+                          itemCount: _displayList.length,
                           itemBuilder: (context, index) {
-                            final g = _filtered[index];
+                            final g = _displayList[index];
                             final color = _statusColor(g.status);
 
                             final isFirst = index == 0;
-                            final isLast = index == _filtered.length - 1;
+                            final isLast = index == _displayList.length - 1;
 
                             final subtitle = g.endDate == null
                                 ? 'Started ${_formatDate(g.startDate)}'
@@ -311,41 +329,46 @@ class _TimelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: 26,
-          child: Column(
-            children: [
-              Expanded(
-                child: Container(
-                  width: 2,
-                  color: isFirst ? Colors.transparent : Colors.grey.shade300,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 26,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isFirst ? Colors.transparent : Colors.grey.shade300,
+                  ),
                 ),
-              ),
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Container(
-                  width: 2,
-                  color: isLast ? Colors.transparent : Colors.grey.shade300,
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isLast ? Colors.transparent : Colors.grey.shade300,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
+          const SizedBox(width: 8),
+          Expanded(
             child: Padding(
-                padding: const EdgeInsets.only(bottom: 8), child: child)),
-      ],
+              padding: const EdgeInsets.only(bottom: 8),
+              child: child,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
