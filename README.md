@@ -122,7 +122,7 @@ Then choose ONE of these modes:
 - `VERCEL_PROJECT_ID`
 
 **Mode B (simpler, usually fine for Personal accounts):**
-- `VERCEL_PROJECT_NAME` (example: `flexifit-black`)
+- `VERCEL_PROJECT_NAME` (example: `flexifit`)
 - (optional) `VERCEL_SCOPE` (team slug or username; only needed if you deploy under a Team)
 
 Important: these are **NOT** the same as app/runtime environment variables.
@@ -158,7 +158,8 @@ How to get `VERCEL_TOKEN`:
 - Vercel Dashboard → your **Avatar/Profile** → **Settings** → **Tokens** → create a token.
 
 How to pick `VERCEL_PROJECT_NAME` (Mode B):
-- This is the **project name** as shown in Vercel (it becomes `<project-name>.vercel.app`).
+- This is the **Vercel project slug/name** (example: `flexifit`).
+- This is NOT the same as the domain you show to users. Your public domain can be changed in Vercel → **Domains** (example: `flexifit-encode.vercel.app`).
 
 Alternative (Dashboard):
 - Vercel Dashboard → your Project → **Settings → General** → copy **Project ID**
