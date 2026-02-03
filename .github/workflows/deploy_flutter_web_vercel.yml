@@ -3,9 +3,6 @@ name: Deploy Flutter Web to Vercel
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'frontend/flexifit_app/**'
-      - '.github/workflows/deploy_flutter_web_vercel.yml'
   workflow_dispatch:
 
 concurrency:
@@ -72,7 +69,6 @@ jobs:
         run: npm i -g vercel@latest
 
       - name: Link Vercel project (CI, optional)
-        working-directory: frontend/flexifit_app
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -86,13 +82,12 @@ jobs:
           # If ORG/PROJECT IDs are provided, link the repo to the exact Vercel project.
           # If they are NOT provided, we will deploy by project name in the next step.
           if [ -n "${VERCEL_ORG_ID:-}" ] && [ -n "${VERCEL_PROJECT_ID:-}" ]; then
-            vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+            vercel pull --yes --environment=production --token "$VERCEL_TOKEN" --cwd frontend/flexifit_app
           else
             echo "Skipping vercel pull: VERCEL_ORG_ID/VERCEL_PROJECT_ID not set (will deploy by name)."
           fi
 
       - name: Deploy to Vercel (Production)
-        working-directory: frontend/flexifit_app
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -107,7 +102,7 @@ jobs:
 
           # Mode A (recommended for teams): ORG_ID + PROJECT_ID set → vercel pull created .vercel/project.json
           if [ -n "${VERCEL_ORG_ID:-}" ] && [ -n "${VERCEL_PROJECT_ID:-}" ]; then
-            vercel deploy --prebuilt --prod --confirm --token "$VERCEL_TOKEN"
+            vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" --cwd frontend/flexifit_app
             exit 0
           fi
 
@@ -124,4 +119,4 @@ jobs:
             SCOPE_ARGS="--scope ${VERCEL_SCOPE}"
           fi
 
-          vercel deploy --prebuilt --prod --confirm --token "$VERCEL_TOKEN" --name "$VERCEL_PROJECT_NAME" $SCOPE_ARGS
+          vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" --cwd frontend/flexifit_app --name "$VERCEL_PROJECT_NAME" $SCOPE_ARGS
