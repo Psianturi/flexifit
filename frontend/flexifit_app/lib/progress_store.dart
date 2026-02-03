@@ -11,6 +11,8 @@ class ProgressStore {
   static const String dailyNudgeHourKey = 'daily_nudge_hour_v1';
   static const String dailyNudgeMinuteKey = 'daily_nudge_minute_v1';
 
+  static const String nightModeEnabledKey = 'night_mode_enabled_v1';
+
   static String _todayKey(DateTime now) {
     final y = now.year.toString().padLeft(4, '0');
     final m = now.month.toString().padLeft(2, '0');
@@ -152,9 +154,20 @@ class ProgressStore {
     return (hour: hour, minute: minute);
   }
 
-  static Future<void> setDailyNudgeTime({required int hour, required int minute}) async {
+  static Future<void> setDailyNudgeTime(
+      {required int hour, required int minute}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(dailyNudgeHourKey, hour);
     await prefs.setInt(dailyNudgeMinuteKey, minute);
+  }
+
+  static Future<bool> getNightModeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(nightModeEnabledKey) ?? false;
+  }
+
+  static Future<void> setNightModeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(nightModeEnabledKey, enabled);
   }
 }

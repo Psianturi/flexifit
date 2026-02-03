@@ -23,7 +23,8 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => ChatScreenState();
 }
 
-class ChatScreenState extends State<ChatScreen> {
+class ChatScreenState extends State<ChatScreen>
+    with AutomaticKeepAliveClientMixin<ChatScreen> {
   final ChatUser _currentUser = ChatUser(id: '1', firstName: 'Me');
   final ChatUser _aiUser = ChatUser(
     id: '2',
@@ -52,15 +53,31 @@ class ChatScreenState extends State<ChatScreen> {
 
   late final ConfettiController _confettiController;
 
+  bool _bootstrapped = false;
+
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(
       duration: const Duration(milliseconds: 900),
     );
-    _loadGoal();
-    _loadProgress();
-    _loadChatHistory();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    if (_bootstrapped) return;
+    _bootstrapped = true;
+
+    await _loadChatHistory();
+    await _loadGoal();
+    await _loadProgress();
+  }
+
+  Future<void> ensureChatLoaded() async {
+    if (_messages.isNotEmpty) return;
+    await _loadChatHistory();
+    await _loadGoal();
+    await _loadProgress();
   }
 
   @override
@@ -130,7 +147,11 @@ class ChatScreenState extends State<ChatScreen> {
 
     if (_userGoal == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => showGoalDialog());
-    } else {
+      return;
+    }
+
+    // Only add the greeting if this is a fresh conversation.
+    if (_messages.isEmpty) {
       _addBotMessage(
           "Hello! Your goal today: $_userGoal. How are you feeling? 😊");
     }
@@ -539,13 +560,17 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final showDebug = AppConfig.showDebugEvals;
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final showQuickReplies = !keyboardOpen && _messages.length <= 1;
 
-    final debugHasData =
-        showDebug && (_lastEmpathyScore != null || _lastEmpathyRationale != null);
+    final debugHasData = showDebug &&
+        (_lastEmpathyScore != null || _lastEmpathyRationale != null);
 
     double reservedBottom = 0;
     if (_isLoading) reservedBottom += 40;
@@ -608,10 +633,11 @@ class ChatScreenState extends State<ChatScreen> {
                         typingUsers: _isLoading ? [_aiUser] : [],
                         inputOptions: InputOptions(
                           inputDecoration: const InputDecoration(
-                            hintText: "I'm tired... / Ready to go! / How do I start?",
+                            hintText:
+                                "I'm tired... / Ready to go! / How do I start?",
                             border: OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
                           ),
                           inputTextStyle: const TextStyle(fontSize: 16),
                         ),
@@ -647,7 +673,8 @@ class ChatScreenState extends State<ChatScreen> {
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.04),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.black.withOpacity(0.08)),
+                            border: Border.all(
+                                color: Colors.black.withOpacity(0.08)),
                           ),
                           child: DefaultTextStyle(
                             style: TextStyle(
@@ -663,7 +690,9 @@ class ChatScreenState extends State<ChatScreen> {
                                   '${_lastRetryUsed == true ? ' • retry used' : ''}'
                                   '${_lastPromptVersion != null ? ' • ${_lastPromptVersion!}' : ''}',
                                 ),
-                                if ((_lastEmpathyRationale ?? '').trim().isNotEmpty) ...[
+                                if ((_lastEmpathyRationale ?? '')
+                                    .trim()
+                                    .isNotEmpty) ...[
                                   const SizedBox(height: 6),
                                   Text(
                                     _lastEmpathyRationale!,
@@ -687,7 +716,8 @@ class ChatScreenState extends State<ChatScreen> {
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.handshake, color: Colors.green.shade700),
+                              Icon(Icons.handshake,
+                                  color: Colors.green.shade700),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -705,7 +735,8 @@ class ChatScreenState extends State<ChatScreen> {
                                     _showActionButtons = false;
                                   });
                                 },
-                                icon: Icon(Icons.close, color: Colors.green.shade700),
+                                icon: Icon(Icons.close,
+                                    color: Colors.green.shade700),
                               ),
                               const SizedBox(width: 6),
                               ElevatedButton.icon(
@@ -734,7 +765,8 @@ class ChatScreenState extends State<ChatScreen> {
                               const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                               const SizedBox(width: 8),
                               Expanded(

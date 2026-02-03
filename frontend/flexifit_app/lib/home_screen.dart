@@ -28,6 +28,10 @@ class _HomeScreenState extends State<HomeScreen>
       if (_tabController.index == 1 && !_tabController.indexIsChanging) {
         _progressKey.currentState?.reload();
       }
+
+      if (_tabController.index == 0 && !_tabController.indexIsChanging) {
+        _chatKey.currentState?.ensureChatLoaded();
+      }
       setState(() {});
     });
   }
@@ -106,7 +110,8 @@ class _HomeScreenState extends State<HomeScreen>
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
+                    child:
+                        Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
                   ),
                   if (isChatTab)
                     IconButton(
@@ -185,7 +190,6 @@ class _HomeScreenState extends State<HomeScreen>
                     clipBehavior: Clip.antiAlias,
                     color: Theme.of(context).scaffoldBackgroundColor,
                     child: MediaQuery(
-
                       data: MediaQuery.of(context).copyWith(
                         size: Size(_webMaxWidth, height - 32),
                       ),

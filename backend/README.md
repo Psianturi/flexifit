@@ -4,7 +4,7 @@ This backend is the “brain” for FlexiFit.
 - Provides `/chat` for the AI Negotiator
 - Provides `/progress` as the foundation for the Progress tab
 - Uses **Google Gemini** for responses
-- Uses **Comet Opik** for observability/tracing (hackathon requirement)
+- Uses **Comet Opik** for observability/tracing
 
 ## Endpoints
 
@@ -82,7 +82,7 @@ $env:RETRY_EMPATHY_THRESHOLD="3"
 python evals/run_experiment.py --base-url http://localhost:8000 --label v1
 ```
 
-Tips for judging:
+Tips for evaluation:
 - Change `PROMPT_VERSION` (and/or `GEMINI_MODEL`) and rerun with a new `--label`.
 - In Opik, filter traces by `name=flexifit_experiment_case` and compare score distributions.
 

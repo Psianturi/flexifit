@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'api_service.dart';
 import 'progress_store.dart';
 import 'notification_service.dart';
+import 'theme_controller.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -29,6 +30,8 @@ class ProgressScreenState extends State<ProgressScreen> {
   bool _dailyNudgeEnabled = false;
   TimeOfDay? _dailyNudgeTime;
 
+  bool _nightModeEnabled = false;
+
   PersonaResult? _cachedPersona;
   bool _personaLoading = false;
 
@@ -44,6 +47,8 @@ class ProgressScreenState extends State<ProgressScreen> {
 
     final nudgeEnabled = await ProgressStore.getDailyNudgeEnabled();
     final nudgeTime = await ProgressStore.getDailyNudgeTime();
+
+    final nightModeEnabled = await ProgressStore.getNightModeEnabled();
 
     final streak = ProgressStore.computeStreak(completions);
     final trend = ProgressStore.last7DaysTrend(completions);
@@ -65,6 +70,16 @@ class ProgressScreenState extends State<ProgressScreen> {
       _dailyNudgeTime = nudgeTime == null
           ? null
           : TimeOfDay(hour: nudgeTime.hour, minute: nudgeTime.minute);
+
+      _nightModeEnabled = nightModeEnabled;
+    });
+  }
+
+  Future<void> _setNightModeEnabled(bool enabled) async {
+    await ThemeController.instance.setNightModeEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _nightModeEnabled = enabled;
     });
   }
 
@@ -712,6 +727,39 @@ class ProgressScreenState extends State<ProgressScreen> {
                         label: const Text('Pick time'),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Appearance',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Switch(
+                        value: _nightModeEnabled,
+                        onChanged: (v) => _setNightModeEnabled(v),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _nightModeEnabled
+                        ? 'Night mode is ON.'
+                        : 'Night mode is OFF.',
+                    style: TextStyle(color: Colors.grey.shade700),
                   ),
                 ],
               ),
