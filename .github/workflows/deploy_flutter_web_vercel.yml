@@ -71,10 +71,14 @@ jobs:
             exit 1
           fi
 
-          # Mode B (simpler): deploy by project name (Personal account works well).
           if [ -z "${VERCEL_PROJECT_NAME:-}" ]; then
             echo "Missing GitHub Secret: VERCEL_PROJECT_NAME" >&2
             exit 1
+          fi
+
+          echo "Deploying to Vercel project: ${VERCEL_PROJECT_NAME}"
+          if [ -n "${VERCEL_SCOPE:-}" ]; then
+            echo "Using Vercel scope/team: ${VERCEL_SCOPE}"
           fi
 
           SCOPE_ARGS=""
@@ -83,4 +87,4 @@ jobs:
             SCOPE_ARGS="--scope ${VERCEL_SCOPE}"
           fi
 
-          vercel deploy --prod --yes --token "$VERCEL_TOKEN" --project "$VERCEL_PROJECT_NAME" $SCOPE_ARGS frontend/flexifit_app/build/web
+          vercel deploy --prod --yes --token "$VERCEL_TOKEN" --name "$VERCEL_PROJECT_NAME" $SCOPE_ARGS frontend/flexifit_app/build/web
