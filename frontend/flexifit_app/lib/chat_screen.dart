@@ -3,6 +3,7 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
 import 'api_service.dart';
@@ -568,6 +569,10 @@ class ChatScreenState extends State<ChatScreen>
     final showDebug = AppConfig.showDebugEvals;
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final showQuickReplies = !keyboardOpen && _messages.length <= 1;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTabletWide = screenWidth >= 760;
+    final maxContentWidth = isTabletWide ? 860.0 : double.infinity;
+    final maxBubbleWidth = math.min(screenWidth * 0.68, 520.0);
 
     final debugHasData = showDebug &&
         (_lastEmpathyScore != null || _lastEmpathyRationale != null);
@@ -607,6 +612,62 @@ class ChatScreenState extends State<ChatScreen>
         Expanded(
           child: Stack(
             children: [
+              if (_messages.length <= 1 && !_isLoading)
+                IgnorePointer(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.teal.withValues(alpha: 0.18),
+                                    Colors.cyan.withValues(alpha: 0.10),
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: Colors.teal.withValues(alpha: 0.20),
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.smart_toy_outlined,
+                                size: 54,
+                                color: Colors.teal.shade700,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              "I'm ready to negotiate a tiny win.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.grey.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "How's your energy right now — tired, busy, or ready to go?",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                height: 1.25,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Column(
                 children: [
                   if (showQuickReplies)
@@ -632,24 +693,115 @@ class ChatScreenState extends State<ChatScreen>
                         messages: _messages,
                         typingUsers: _isLoading ? [_aiUser] : [],
                         inputOptions: InputOptions(
-                          inputDecoration: const InputDecoration(
+                          inputDecoration: InputDecoration(
                             hintText:
-                                "I'm tired... / Ready to go! / How do I start?",
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                                "I'm tired… / Ready to go! / Where do I start?",
+                            filled: true,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withValues(alpha: 0.85),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide(
+                                color: Colors.teal.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide(
+                                color: Colors.teal.withValues(alpha: 0.18),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide(
+                                color: Colors.teal.withValues(alpha: 0.35),
+                                width: 1.4,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
                           ),
                           inputTextStyle: const TextStyle(fontSize: 16),
                         ),
                         messageOptions: MessageOptions(
+                          showOtherUsersName: false,
                           showTime: true,
+                          maxWidth: maxBubbleWidth,
+                          avatarBuilder: (user, _, __) {
+                            if (user.id == _aiUser.id) {
+                              return CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.teal.withValues(alpha: 0.12),
+                                child: Icon(
+                                  Icons.smart_toy_outlined,
+                                  size: 18,
+                                  color: Colors.teal.shade700,
+                                ),
+                              );
+                            }
+
+                            // Hide current user avatar for a cleaner look.
+                            return const SizedBox(width: 0, height: 0);
+                          },
                           messageDecorationBuilder:
                               (message, previousMessage, nextMessage) {
+                            final isMe = message.user.id == _currentUser.id;
+
+                            final radius = BorderRadius.only(
+                              topLeft: Radius.circular(isMe ? 18 : 6),
+                              topRight: Radius.circular(isMe ? 18 : 18),
+                              bottomLeft: Radius.circular(isMe ? 18 : 18),
+                              bottomRight: Radius.circular(isMe ? 6 : 18),
+                            );
+
+                            if (isMe) {
+                              return BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.teal.shade400,
+                                    Colors.cyan.shade400,
+                                  ],
+                                ),
+                                borderRadius: radius,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.teal.withValues(alpha: 0.18),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 6),
+                                  )
+                                ],
+                              );
+                            }
+
                             return BoxDecoration(
-                              color: message.user.id == '1'
-                                  ? Colors.teal.shade100
-                                  : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surface
+                                  .withValues(alpha: 0.86),
+                              borderRadius: radius,
+                              border: Border.all(
+                                color: Colors.teal.withValues(alpha: 0.10),
+                              ),
+                            );
+                          },
+                          messageTextBuilder:
+                              (message, previousMessage, nextMessage) {
+                            final isMe = message.user.id == _currentUser.id;
+                            return Text(
+                              message.text,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                height: 1.25,
+                                color: isMe
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
                             );
                           },
                         ),
@@ -671,10 +823,10 @@ class ChatScreenState extends State<ChatScreen>
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color: Colors.black.withOpacity(0.08)),
+                                color: Colors.black.withValues(alpha: 0.08)),
                           ),
                           child: DefaultTextStyle(
                             style: TextStyle(
@@ -794,7 +946,24 @@ class ChatScreenState extends State<ChatScreen>
 
     final withConfetti = Stack(
       children: [
-        content,
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).scaffoldBackgroundColor,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+              ],
+            ),
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: content,
+            ),
+          ),
+        ),
         Align(
           alignment: Alignment.topCenter,
           child: IgnorePointer(

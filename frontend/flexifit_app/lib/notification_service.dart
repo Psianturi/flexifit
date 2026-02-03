@@ -78,9 +78,17 @@ class NotificationService {
 
     final scheduledAt = _nextInstanceOf(time);
 
+    final localeCode = WidgetsBinding.instance.platformDispatcher.locale.languageCode
+      .toLowerCase();
+    final isIndonesian = localeCode == 'id';
+
     final message = (goal == null || goal.trim().isEmpty)
+      ? (isIndonesian
         ? "Energi kamu tinggal berapa persen hari ini? Yuk, negosiasi targetmu sebentar."
-        : "Energi kamu tinggal berapa persen hari ini? Yuk, negosiasi target ‘${goal.trim()}’ sebentar.";
+        : "How's your energy today? Let's negotiate a tiny step.")
+      : (isIndonesian
+        ? "Energi kamu tinggal berapa persen hari ini? Yuk, negosiasi target ‘${goal.trim()}’ sebentar."
+        : "How's your energy today? Let's negotiate a tiny step for '${goal.trim()}'.");
 
     const androidDetails = AndroidNotificationDetails(
       channelId,

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:google_fonts/google_fonts.dart';
 import 'home_screen.dart';
 import 'notification_service.dart';
 import 'theme_controller.dart';
@@ -15,20 +17,31 @@ class FlexiFitApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: Colors.teal,
+      brightness: Brightness.light,
+    );
+
+    const darkBackground = Color(0xFF121212);
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: Colors.teal,
+      brightness: Brightness.dark,
+      surface: const Color(0xFF1B1B1B),
+      surfaceContainerHighest: const Color(0xFF232323),
+    );
+
     final lightTheme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.teal,
-        brightness: Brightness.light,
-      ),
+      colorScheme: lightScheme,
+      scaffoldBackgroundColor: const Color(0xFFF7FAF9),
       useMaterial3: true,
+      textTheme: GoogleFonts.poppinsTextTheme(),
     );
 
     final darkTheme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.teal,
-        brightness: Brightness.dark,
-      ),
+      colorScheme: darkScheme,
+      scaffoldBackgroundColor: darkBackground,
       useMaterial3: true,
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
     );
 
     return ValueListenableBuilder<ThemeMode>(

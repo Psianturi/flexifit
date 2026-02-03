@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/services.dart';
 
 import 'api_service.dart';
 import 'progress_store.dart';
 import 'notification_service.dart';
 import 'theme_controller.dart';
+
+Color _cOpacity(Color color, double opacity) {
+  final o = opacity.clamp(0.0, 1.0).toDouble();
+  return color.withValues(alpha: o);
+}
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -34,6 +40,37 @@ class ProgressScreenState extends State<ProgressScreen> {
 
   PersonaResult? _cachedPersona;
   bool _personaLoading = false;
+
+  static const Set<String> _idStopwords = {
+    'yang',
+    'untuk',
+    'dan',
+    'dari',
+    'dengan',
+    'kamu',
+    'anda',
+    'ayo',
+    'hari',
+    'ini',
+    'jangan',
+    'bisa',
+    'saja',
+    'lebih',
+    'mulai',
+    'waktu',
+    'ambil',
+    'buku',
+    'baca',
+    'satu',
+    'halaman',
+    'tetap',
+    'semangat',
+    'karena',
+    'kalau',
+    'banget',
+  };
+
+
 
   @override
   void initState() {
@@ -98,7 +135,15 @@ class ProgressScreenState extends State<ProgressScreen> {
               .toList(growable: false);
         }
       } catch (_) {
-        // Fall back to newline-based parsing.
+        // Might be a Python-style list string: ['a', 'b'] (single quotes).
+        final items = RegExp(r'''["']([^"']+)["']''')
+            .allMatches(text)
+            .map((m) => (m.group(1) ?? '').trim())
+            .where((s) => s.isNotEmpty)
+            .toList(growable: false);
+        if (items.length >= 2) {
+          return items;
+        }
       }
     }
 
@@ -110,6 +155,44 @@ class ProgressScreenState extends State<ProgressScreen> {
       final normalized = l.startsWith('- ') ? l.substring(2) : l;
       return normalized.startsWith('• ') ? normalized.substring(2) : normalized;
     }).toList(growable: false);
+  }
+
+  String _inferLanguageForAi(List<Map<String, dynamic>> history) {
+    // Prefer the language implied by recent USER messages to avoid device-locale
+    // causing mixed-language AI output when the user chats in English.
+    final recentUserText = history
+        .where((m) => (m['role']?.toString().toLowerCase() ?? '') == 'user')
+        .map((m) => m['text']?.toString() ?? '')
+        .where((t) => t.trim().isNotEmpty)
+        .toList(growable: false)
+        .reversed
+        .take(6)
+        .join(' ')
+        .toLowerCase();
+
+    if (recentUserText.isNotEmpty) {
+      final cleaned = recentUserText.replaceAll(RegExp(r'[^a-z\s]'), ' ');
+      final tokens = cleaned
+          .split(RegExp(r'\s+'))
+          .where((t) => t.isNotEmpty)
+          .toList(growable: false);
+
+      var hits = 0;
+      for (final t in tokens) {
+        if (_idStopwords.contains(t)) {
+          hits++;
+          if (hits >= 2) break;
+        }
+      }
+
+      if (hits >= 2) return 'id';
+      // If the device is Indonesian but the chat looks non-Indonesian, default to English.
+      final device = Localizations.localeOf(context).languageCode.toLowerCase();
+      if (device == 'id') return 'en';
+      return device;
+    }
+
+    return Localizations.localeOf(context).languageCode.toLowerCase();
   }
 
   Future<void> _pickDailyNudgeTime() async {
@@ -196,9 +279,12 @@ class ProgressScreenState extends State<ProgressScreen> {
               })
           .toList();
 
+      final language = _inferLanguageForAi(history);
+
       final result = await ApiService.getProgressInsights(
         currentGoal: goal,
         history: history,
+        language: language,
       );
 
       WeeklyMotivationResult? motivationResult;
@@ -207,6 +293,7 @@ class ProgressScreenState extends State<ProgressScreen> {
           goal: goal,
           completionRate7d: rate7d,
           last7Days: trend7d,
+          language: language,
         );
       } catch (e) {
         debugPrint('Weekly motivation failed: $e');
@@ -269,12 +356,15 @@ class ProgressScreenState extends State<ProgressScreen> {
             })
         .toList();
 
+    final language = _inferLanguageForAi(history);
+
     return ApiService.getPersona(
       goal: goal,
       streak: streak,
       completionRate7d: rate7d,
       last7Days: trend7d,
       history: history,
+      language: language,
     );
   }
 
@@ -300,7 +390,7 @@ class ProgressScreenState extends State<ProgressScreen> {
         context: context,
         barrierDismissible: true,
         barrierLabel: 'persona',
-        barrierColor: Colors.black.withOpacity(0.75),
+        barrierColor: _cOpacity(Colors.black, 0.75),
         transitionDuration: const Duration(milliseconds: 220),
         pageBuilder: (context, _, __) {
           return FutureBuilder<PersonaResult>(
@@ -325,13 +415,13 @@ class ProgressScreenState extends State<ProgressScreen> {
                                     borderRadius: BorderRadius.circular(22),
                                     boxShadow: [
                                       BoxShadow(
-                                        color:
-                                            Colors.tealAccent.withOpacity(0.20),
+                                        color: _cOpacity(
+                                            Colors.tealAccent, 0.20),
                                         blurRadius: 28,
                                         spreadRadius: 2,
                                       ),
                                       BoxShadow(
-                                        color: Colors.teal.withOpacity(0.18),
+                                        color: _cOpacity(Colors.teal, 0.18),
                                         blurRadius: 48,
                                         spreadRadius: 6,
                                       ),
@@ -473,13 +563,13 @@ class ProgressScreenState extends State<ProgressScreen> {
                                   borderRadius: BorderRadius.circular(22),
                                   boxShadow: [
                                     BoxShadow(
-                                      color:
-                                          Colors.tealAccent.withOpacity(0.20),
+                                        color: _cOpacity(
+                                          Colors.tealAccent, 0.20),
                                       blurRadius: 28,
                                       spreadRadius: 2,
                                     ),
                                     BoxShadow(
-                                      color: Colors.teal.withOpacity(0.18),
+                                      color: _cOpacity(Colors.teal, 0.18),
                                       blurRadius: 48,
                                       spreadRadius: 6,
                                     ),
@@ -673,236 +763,356 @@ class ProgressScreenState extends State<ProgressScreen> {
     final goalText = _goal ?? 'Not set';
     final insightsLines = _normalizedInsights(_aiInsights);
 
-    return RefreshIndicator(
-      onRefresh: reload,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _StatCard(
-            title: 'Main Goal',
-            value: goalText,
-            icon: Icons.flag,
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Daily Nudge',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Switch(
-                        value: _dailyNudgeEnabled,
-                        onChanged: (v) => _setDailyNudgeEnabled(v),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'A gentle daily trigger to open the app and negotiate a tiny step.',
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _dailyNudgeTime == null
-                              ? 'Time: not set'
-                              : 'Time: ${_dailyNudgeTime!.hour.toString().padLeft(2, '0')}:${_dailyNudgeTime!.minute.toString().padLeft(2, '0')}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _pickDailyNudgeTime,
-                        icon: const Icon(Icons.schedule),
-                        label: const Text('Pick time'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 820;
+        final maxWidth = isWide ? 920.0 : double.infinity;
+
+        final background = Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).scaffoldBackgroundColor,
+                _cOpacity(Theme.of(context).colorScheme.primary, 0.06),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Appearance',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+        );
+
+        final dailyNudgeCard = _GlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Daily Nudge',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Switch(
-                        value: _nightModeEnabled,
-                        onChanged: (v) => _setNightModeEnabled(v),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _nightModeEnabled
-                        ? 'Night mode is ON.'
-                        : 'Night mode is OFF.',
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _doneToday
-                          ? "Today's done is marked ✅"
-                          : "Haven't marked today yet",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  ),
-                  if (!_doneToday)
-                    ElevatedButton.icon(
-                      onPressed: _markDoneToday,
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('Mark DONE'),
-                    )
-                  else
+                    Switch(
+                      value: _dailyNudgeEnabled,
+                      onChanged: (v) => _setDailyNudgeEnabled(v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'A gentle daily trigger to open the app and negotiate a tiny step.',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _dailyNudgeTime == null
+                            ? 'Time: not set'
+                            : 'Time: ${_dailyNudgeTime!.hour.toString().padLeft(2, '0')}:${_dailyNudgeTime!.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     OutlinedButton.icon(
-                      onPressed: _undoDoneToday,
-                      icon: const Icon(Icons.undo),
-                      label: const Text('Undo'),
+                      onPressed: _pickDailyNudgeTime,
+                      icon: const Icon(Icons.schedule),
+                      label: const Text('Pick time'),
                     ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  title: 'Streak',
-                  value: '$_streak days',
-                  icon: Icons.local_fire_department,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  title: 'Weekly Consistency',
-                  value: '${_completionRate7d.toStringAsFixed(0)}%',
-                  icon: Icons.show_chart,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _TrendCard(trend: _trend7d),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'AI Insights',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+        );
+
+        final appearanceCard = _GlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Appearance',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: _syncing ? null : _syncWithAi,
-                        icon: _syncing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.sync),
-                        label: Text(_syncing ? 'Syncing' : 'Sync with AI'),
-                      ),
-                    ],
+                    ),
+                    Switch(
+                      value: _nightModeEnabled,
+                      onChanged: (v) => _setNightModeEnabled(v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _nightModeEnabled
+                      ? 'Dark mode is ON.'
+                      : 'Dark mode is OFF.',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        final doneTodayCard = _GlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _doneToday
+                        ? "Today's done is marked ✅"
+                        : "Haven't marked today yet",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  if (_weeklyMotivation != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.teal.shade100),
+                ),
+                if (!_doneToday)
+                  ElevatedButton.icon(
+                    onPressed: _markDoneToday,
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text('Mark DONE'),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: _undoDoneToday,
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Undo'),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        final aiInsightsCard = _GlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'AI Insights',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _syncing ? null : _syncWithAi,
+                      icon: _syncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_syncing ? 'Syncing' : 'Sync'),
+                    ),
+                  ],
+                ),
+                if (_weeklyMotivation != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        color: _cOpacity(
+                          Theme.of(context).colorScheme.primary, 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _cOpacity(
+                            Theme.of(context).colorScheme.primary, 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.fitness_center,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _weeklyMotivation!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (_lastSyncedAt != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Last synced: ${_lastSyncedAt!.hour.toString().padLeft(2, '0')}:${_lastSyncedAt!.minute.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      fontSize: 12,
+                        color: _cOpacity(
+                          Theme.of(context).colorScheme.onSurface, 0.65),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                if (_microHabitsOffered != null)
+                  Text(
+                      'Micro-habits offered (estimated): $_microHabitsOffered'),
+                if (_aiInsights != null && insightsLines.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...insightsLines.map(
+                    (l) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.fitness_center,
-                              color: Colors.teal.shade700, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _weeklyMotivation!,
-                              style: TextStyle(
-                                color: Colors.teal.shade900,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                            color: _cOpacity(
+                                Theme.of(context).colorScheme.primary, 0.85),
                           ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(l)),
                         ],
                       ),
                     ),
-                  ],
-                  if (_lastSyncedAt != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Last synced: ${_lastSyncedAt!.hour.toString().padLeft(2, '0')}:${_lastSyncedAt!.minute.toString().padLeft(2, '0')}',
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  if (_microHabitsOffered != null)
-                    Text(
-                        'Micro-habits offered (estimated): $_microHabitsOffered'),
-                  if (_aiInsights != null && insightsLines.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ...insightsLines.map((l) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Text('• $l'),
-                        )),
-                  ] else
-                    const Text(
-                        'Tap “Sync with AI” to analyze your recent chat and get guidance.'),
-                ],
-              ),
+                  ),
+                ] else
+                  const Text(
+                    'Tap “Sync” to analyze your recent chat and get guidance.',
+                  ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+
+        Widget body;
+        if (!isWide) {
+          body = ListView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              _StatCard(
+                title: 'Main Goal',
+                value: goalText,
+                icon: Icons.flag,
+                emphasized: true,
+              ),
+              const SizedBox(height: 12),
+              dailyNudgeCard,
+              const SizedBox(height: 12),
+              appearanceCard,
+              const SizedBox(height: 12),
+              doneTodayCard,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Streak',
+                      value: '$_streak days',
+                      icon: Icons.local_fire_department,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Weekly Consistency',
+                      value: '${_completionRate7d.toStringAsFixed(0)}%',
+                      icon: Icons.show_chart,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _TrendCard(trend: _trend7d),
+              const SizedBox(height: 12),
+              aiInsightsCard,
+            ],
+          );
+        } else {
+          final effectiveW = math.min(constraints.maxWidth, maxWidth);
+          final spacing = 16.0;
+          final col = (effectiveW - spacing) / 2;
+
+          body = SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                SizedBox(
+                  width: col,
+                  child: _StatCard(
+                    title: 'Current Goal',
+                    value: goalText,
+                    icon: Icons.flag,
+                    emphasized: true,
+                  ),
+                ),
+                SizedBox(width: col, child: doneTodayCard),
+                SizedBox(
+                  width: col,
+                  child: _StatCard(
+                    title: 'Streak',
+                    value: '$_streak days',
+                    icon: Icons.local_fire_department,
+                  ),
+                ),
+                SizedBox(
+                  width: col,
+                  child: _StatCard(
+                    title: 'Weekly Consistency',
+                    value: '${_completionRate7d.toStringAsFixed(0)}%',
+                    icon: Icons.show_chart,
+                  ),
+                ),
+                SizedBox(width: effectiveW, child: _TrendCard(trend: _trend7d)),
+                SizedBox(width: effectiveW, child: aiInsightsCard),
+                SizedBox(width: col, child: dailyNudgeCard),
+                SizedBox(width: col, child: appearanceCard),
+              ],
+            ),
+          );
+        }
+
+        return Stack(
+          children: [
+            background,
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: RefreshIndicator(
+                  onRefresh: reload,
+                  child: body,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -911,30 +1121,62 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
+  final bool emphasized;
 
   const _StatCard({
     required this.title,
     required this.value,
     required this.icon,
+    this.emphasized = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final scheme = Theme.of(context).colorScheme;
+    final accent = scheme.primary;
+
+    return _GlassCard(
+      tint: emphasized ? _cOpacity(accent, 0.07) : null,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(icon),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                gradient: LinearGradient(
+                  colors: [
+                    _cOpacity(accent, 0.18),
+                    _cOpacity(accent, 0.08),
+                  ],
+                ),
+                border: Border.all(color: _cOpacity(accent, 0.18)),
+              ),
+              child: Icon(icon, color: accent),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.black54)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _cOpacity(scheme.onSurface, 0.65),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(value,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: emphasized ? 16.5 : 15.5,
+                      color: scheme.onSurface,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -952,14 +1194,20 @@ class _TrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final scheme = Theme.of(context).colorScheme;
+    return _GlassCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Last 7 days',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Last 7 days',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+            ),
             const SizedBox(height: 12),
             Row(
               children: trend.map((d) {
@@ -974,12 +1222,28 @@ class _TrendCard extends StatelessWidget {
                         height: 22,
                         margin: const EdgeInsets.symmetric(horizontal: 3),
                         decoration: BoxDecoration(
-                          color: done ? Colors.green : Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(6),
+                          gradient: done
+                              ? LinearGradient(
+                                  colors: [
+                                    Colors.green.shade400,
+                                    Colors.teal.shade400,
+                                  ],
+                                )
+                              : null,
+                          color: done
+                              ? null
+                              : _cOpacity(scheme.onSurface, 0.10),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(label, style: const TextStyle(fontSize: 10)),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _cOpacity(scheme.onSurface, 0.65),
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -988,6 +1252,37 @@ class _TrendCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final Color? tint;
+
+  const _GlassCard({required this.child, this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final base = tint ?? _cOpacity(scheme.surface, 0.88);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _cOpacity(scheme.primary, 0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _cOpacity(Colors.black, 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: child,
     );
   }
 }

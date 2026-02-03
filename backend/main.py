@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 import google.generativeai as genai
 from google.api_core.exceptions import DeadlineExceeded, Unauthenticated
 from dotenv import load_dotenv
@@ -31,6 +31,138 @@ except Exception:
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+_ID_STOPWORDS = {
+    # A lightweight heuristic list to detect Indonesian output.
+    "yang",
+    "untuk",
+    "dan",
+    "dari",
+    "dengan",
+    "kamu",
+    "anda",
+    "ayo",
+    "hari",
+    "ini",
+    "jangan",
+    "bisa",
+    "saja",
+    "lebih",
+    "mulai",
+    "waktu",
+    "ambil",
+    "buku",
+    "bukumu",
+    "baca",
+    "satu",
+    "halaman",
+    "tetap",
+    "semangat",
+    "karena",
+    "kalau",
+    "banget",
+}
+
+
+_LANGUAGE_NAME = {
+    "en": "English",
+    "id": "Indonesian",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "pt": "Portuguese",
+    "it": "Italian",
+    "nl": "Dutch",
+    "tr": "Turkish",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+}
+
+
+def _normalize_language(lang: Optional[str]) -> str:
+    """Normalize BCP-47/locale strings to a primary language code.
+
+    Examples: 'en-US' -> 'en', 'id_ID' -> 'id'.
+    """
+
+    if not lang:
+        return "en"
+
+    raw = str(lang).strip().lower().replace("_", "-")
+    if not raw:
+        return "en"
+
+    primary = raw.split("-")[0]
+    if not re.match(r"^[a-z]{2,3}$", primary):
+        return "en"
+    return primary
+
+
+def _language_label(lang: Optional[str]) -> str:
+    code = _normalize_language(lang)
+    return _LANGUAGE_NAME.get(code, code)
+
+
+def _coerce_insights_bullets(value: Any) -> str:
+    """Coerce model output into a newline-separated bullet string.
+
+    Prevents UI issues where a Python/JSON list ends up being stringified like
+    "['a', 'b']".
+    """
+
+    if value is None:
+        return ""
+
+    if isinstance(value, (list, tuple)):
+        items = [str(v).strip() for v in value if str(v).strip()]
+        return "\n".join([f"- {i.lstrip('-').strip()}" for i in items])
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    # If the model returned something list-like as a string, try to recover.
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            decoded = json.loads(text)
+            if isinstance(decoded, list):
+                items = [str(v).strip() for v in decoded if str(v).strip()]
+                return "\n".join([f"- {i.lstrip('-').strip()}" for i in items])
+        except Exception:
+            pass
+
+    # Ensure bullets.
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    if not lines:
+        return ""
+
+    normalized: List[str] = []
+    for line in lines:
+        if line.startswith("- "):
+            normalized.append(line)
+        elif line.startswith("• "):
+            normalized.append("- " + line[2:].strip())
+        else:
+            normalized.append("- " + line.lstrip("-").strip())
+
+    return "\n".join(normalized)
+
+
+def _looks_indonesian(text: str) -> bool:
+    if not text:
+        return False
+    # Keep only letters/spaces for tokenization.
+    cleaned = re.sub(r"[^A-Za-z\s]", " ", text).lower()
+    tokens = [t for t in cleaned.split() if t]
+    if not tokens:
+        return False
+    hits = sum(1 for t in tokens if t in _ID_STOPWORDS)
+    # Require multiple hits to reduce false positives.
+    return hits >= 2 or (hits >= 1 and (hits / max(1, len(tokens))) >= 0.20)
 
 load_dotenv()
 
@@ -217,6 +349,7 @@ class ChatRequest(BaseModel):
     user_message: str
     current_goal: str
     chat_history: List[ChatMessage] = []
+    language: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -248,6 +381,7 @@ class WeeklyMotivationRequest(BaseModel):
     goal: str
     completion_rate_7d: float
     last7_days: List[DayCompletion]
+    language: Optional[str] = None
 
 
 class WeeklyMotivationData(BaseModel):
@@ -265,6 +399,7 @@ class PersonaRequest(BaseModel):
     streak: int = 0
     last7_days: List[DayCompletion] = []
     chat_history: List[ChatMessage] = []
+    language: Optional[str] = None
 
 
 class PersonaData(BaseModel):
@@ -508,7 +643,11 @@ def _estimate_micro_habits_offered(history: List[ChatMessage]) -> int:
         "feature": "progress-insights",
     },
 )
-def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict:
+def call_gemini_progress_insights(
+    goal: str,
+    history: List[ChatMessage],
+    language: Optional[str] = None,
+) -> dict:
     """Generate a short progress summary from recent chat history.
 
     Returns a dict with:
@@ -519,11 +658,16 @@ def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict
         [f"{m.role.upper()}: {m.text}" for m in history[-20:]]
     )
 
+    lang_label = _language_label(language)
+
     prompt = (
         "You analyze a user's habit-coaching chat history and summarize progress. "
-        "Return STRICT JSON only (no markdown).\n"
+        f"Write in {lang_label}. Return STRICT JSON only (no markdown).\n"
         "Keys: insights (string), micro_habits_offered (integer).\n"
-        "Rules: insights must be concise, max 3 bullet points, and include one next micro-habit suggestion.\n\n"
+        "Rules:\n"
+        "- insights must be a single STRING with 2–3 bullet lines, each starting with '- '.\n"
+        "- Include exactly one next micro-habit suggestion as the final bullet.\n"
+        "- Keep each bullet short and concrete.\n\n"
         f"GOAL: {goal}\n\n"
         f"CHAT_HISTORY:\n{transcript}\n"
     )
@@ -542,6 +686,49 @@ def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict
     payload = json.loads(raw)
     if not isinstance(payload, dict):
         raise ValueError("Progress insights must be a JSON object")
+
+    # Coerce insights to a clean bullet string (handles list outputs).
+    payload["insights"] = _coerce_insights_bullets(payload.get("insights"))
+    insights_text = str(payload.get("insights") or "").strip()
+
+    if _normalize_language(language) == "en" and insights_text and _looks_indonesian(insights_text):
+        retry_prompt = (
+            "You analyze a user's habit-coaching chat history and summarize progress. "
+            "IMPORTANT: Write in English only. If the chat history contains Indonesian, translate it and still answer in English. "
+            "Return STRICT JSON only (no markdown).\n"
+            "Keys: insights (string), micro_habits_offered (integer).\n"
+            "Rules:\n"
+            "- insights must be a single STRING with 2–3 bullet lines, each starting with '- '.\n"
+            "- Include exactly one next micro-habit suggestion as the final bullet.\n"
+            "- Keep each bullet short and concrete.\n\n"
+            f"GOAL: {goal}\n\n"
+            f"CHAT_HISTORY:\n{transcript}\n"
+        )
+        try:
+            retry = model.generate_content(
+                retry_prompt,
+                request_options={"timeout": 10},
+            )
+            retry_raw = (retry.text or "").strip()
+            s = retry_raw.find("{")
+            e = retry_raw.rfind("}")
+            if s != -1 and e != -1 and e > s:
+                retry_raw = retry_raw[s : e + 1]
+            retry_payload = json.loads(retry_raw)
+            if isinstance(retry_payload, dict):
+                retry_payload["insights"] = _coerce_insights_bullets(retry_payload.get("insights"))
+                retry_insights = str(retry_payload.get("insights") or "").strip()
+                if retry_insights and not _looks_indonesian(retry_insights):
+                    payload = retry_payload
+        except Exception:
+            pass
+
+    final_insights = str(payload.get("insights") or "").strip()
+    if not final_insights:
+        payload["insights"] = "- Keep the habit tiny today.\n- Pick one micro-step and do it now.\n- Consistency beats intensity."
+    elif _normalize_language(language) == "en" and _looks_indonesian(final_insights):
+        payload["insights"] = "- Keep the habit tiny today.\n- Pick one micro-step and do it now.\n- Consistency beats intensity."
+
     return payload
 
 
@@ -555,7 +742,10 @@ def call_gemini_progress_insights(goal: str, history: List[ChatMessage]) -> dict
     },
 )
 def call_gemini_weekly_motivation(
-    goal: str, completion_rate_7d: float, last7_days: List[DayCompletion]
+    goal: str,
+    completion_rate_7d: float,
+    last7_days: List[DayCompletion],
+    language: Optional[str] = None,
 ) -> str:
     done_days = sum(1 for d in last7_days if bool(d.done))
     total_days = max(1, len(last7_days))
@@ -564,9 +754,11 @@ def call_gemini_weekly_motivation(
         [f"{d.date}:{'done' if d.done else 'miss'}" for d in last7_days]
     )
 
+    lang_label = _language_label(language)
+
     prompt = (
         "You are a tough-but-supportive fitness coach. "
-        "Return ONLY ONE sentence in Indonesian (no markdown, no bullet points). "
+        f"Return ONLY ONE sentence in {lang_label} (no markdown, no bullet points). "
         "Keep it short (max 20 words), direct, and motivating.\n\n"
         f"GOAL: {goal}\n"
         f"WEEKLY_COMPLETION_RATE: {completion_rate_7d:.0f}%\n"
@@ -583,8 +775,33 @@ def call_gemini_weekly_motivation(
     # Keep it a single line/sentence.
     text = re.sub(r"\s+", " ", text)
     text = text.strip().strip("\"").strip()
+
+    if _normalize_language(language) == "en" and _looks_indonesian(text):
+        rewrite_prompt = (
+            "Rewrite the following text into English. "
+            "Return ONLY ONE sentence, max 20 words, no markdown, no bullet points. "
+            "Do NOT include any Indonesian words.\n\n"
+            f"TEXT: {text}\n"
+        )
+        try:
+            rewrite = model.generate_content(
+                rewrite_prompt,
+                request_options={"timeout": 10},
+            )
+            rewritten = re.sub(r"\s+", " ", (rewrite.text or "").strip())
+            rewritten = rewritten.strip().strip("\"").strip()
+            if rewritten and not _looks_indonesian(rewritten):
+                text = rewritten
+        except Exception:
+            pass
+
     if not text:
-        raise ValueError("Empty weekly motivation")
+        return "Tiny steps count—do the smallest version today and keep the streak alive."
+
+    # Final hard-guard for English requests.
+    if _normalize_language(language) == "en" and _looks_indonesian(text):
+        return "Tiny steps count—do the smallest version today and keep the streak alive."
+
     return text
 
 
@@ -621,16 +838,18 @@ def call_gemini_persona(payload: PersonaRequest) -> dict:
         [f"{m.role.upper()}: {m.text}" for m in (payload.chat_history or [])[-20:]]
     )
 
+    lang_label = _language_label(payload.language)
+
     prompt = (
         "You are a witty but supportive habit-coach game designer. "
-        "Analyze the user data and generate a playful, slightly 'nyeleneh' RPG-style persona. "
+        "Analyze the user data and generate a playful, slightly quirky RPG-style persona. "
         "Be motivating, not insulting. Keep it punchy.\n"
         "Return STRICT JSON only (no markdown, no extra text).\n"
         "Schema: {\"archetype_title\": string, \"description\": string, \"avatar_id\": string, \"power_level\": integer}.\n"
         "Rules:\n"
         f"- avatar_id MUST be exactly one of: {sorted(_ALLOWED_AVATAR_IDS)}\n"
-        "- archetype_title: 2-5 words, English (funny, punchy).\n"
-        "- description: 1-2 short sentences in English, funny but supportive.\n"
+        f"- archetype_title: 2-5 words, {lang_label} (funny, punchy).\n"
+        f"- description: 1-2 short sentences in {lang_label}, funny but supportive.\n"
         "- power_level: 1..100 (higher = more consistent).\n\n"
         f"GOAL: {payload.current_goal}\n"
         f"COMPLETION_RATE_7D: {float(payload.completion_rate_7d):.0f}%\n"
@@ -807,7 +1026,11 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
         insights = None
         micro_habits_from_ai: Optional[int] = None
         try:
-            ai_payload = call_gemini_progress_insights(request.current_goal, history)
+            ai_payload = call_gemini_progress_insights(
+                request.current_goal,
+                history,
+                language=request.language,
+            )
             insights = ai_payload.get("insights")
             mh = ai_payload.get("micro_habits_offered")
             if isinstance(mh, (int, float)):
@@ -823,8 +1046,9 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
        # Calculate completion rate (capped at 100%)
         completion_rate = float(min(100.0, (min(total_chats, 10) / 10.0) * 100.0))
 
-        if not insights or not str(insights).strip():
-            insights = "- Keep the habit tiny today.\n- Pick one micro-step and do it now.\n- Consistency beats intensity."
+        insights_text = _coerce_insights_bullets(insights)
+        if not insights_text:
+            insights_text = "- Keep the habit tiny today.\n- Pick one micro-step and do it now.\n- Consistency beats intensity."
 
         progress_data = ProgressData(
             goal=request.current_goal,
@@ -832,7 +1056,7 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
             micro_habits_offered=micro_habits_offered,
             completion_rate=completion_rate,
             last_interaction="recent",
-            insights=str(insights),
+            insights=insights_text,
         )
 
         return ProgressResponse(status="success", data=progress_data)
@@ -860,6 +1084,7 @@ async def weekly_motivation_endpoint(
                 goal=request.goal,
                 completion_rate_7d=rate,
                 last7_days=request.last7_days,
+                language=request.language,
             )
         except Exception as e:
             logger.warning(f"⚠ Weekly motivation fallback (Gemini unavailable): {e}")

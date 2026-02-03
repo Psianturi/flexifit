@@ -62,19 +62,26 @@ class ApiService {
     required String message,
     required String currentGoal,
     required List<Map<String, String>> history,
+    String? language,
   }) async {
     try {
       final url = Uri.parse('$baseUrl/chat');
+
+      final payload = <String, dynamic>{
+        'user_message': message,
+        'current_goal': currentGoal,
+        'chat_history': history,
+      };
+      final lang = (language ?? '').trim();
+      if (lang.isNotEmpty) {
+        payload['language'] = lang;
+      }
 
       final response = await http
           .post(
             url,
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'user_message': message,
-              'current_goal': currentGoal,
-              'chat_history': history,
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 25));
 
@@ -146,18 +153,25 @@ class ApiService {
   static Future<ProgressInsights> getProgressInsights({
     required String currentGoal,
     required List<Map<String, dynamic>> history,
+    String? language,
   }) async {
     final url = Uri.parse('$baseUrl/progress');
+
+    final payload = <String, dynamic>{
+      'user_message': 'progress_check',
+      'current_goal': currentGoal,
+      'chat_history': history,
+    };
+    final lang = (language ?? '').trim();
+    if (lang.isNotEmpty) {
+      payload['language'] = lang;
+    }
 
     final response = await http
         .post(
           url,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'user_message': 'progress_check',
-            'current_goal': currentGoal,
-            'chat_history': history,
-          }),
+          body: jsonEncode(payload),
         )
         .timeout(const Duration(seconds: 12));
 
@@ -185,23 +199,30 @@ class ApiService {
     required String goal,
     required double completionRate7d,
     required List<Map<String, dynamic>> last7Days,
+    String? language,
   }) async {
     final url = Uri.parse('$baseUrl/progress/motivation');
+
+    final payload = <String, dynamic>{
+      'goal': goal,
+      'completion_rate_7d': completionRate7d,
+      'last7_days': last7Days
+          .map((d) => {
+                'date': d['date'],
+                'done': d['done'] == true,
+              })
+          .toList(),
+    };
+    final lang = (language ?? '').trim();
+    if (lang.isNotEmpty) {
+      payload['language'] = lang;
+    }
 
     final response = await http
         .post(
           url,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'goal': goal,
-            'completion_rate_7d': completionRate7d,
-            'last7_days': last7Days
-                .map((d) => {
-                      'date': d['date'],
-                      'done': d['done'] == true,
-                    })
-                .toList(),
-          }),
+          body: jsonEncode(payload),
         )
         .timeout(const Duration(seconds: 12));
 
@@ -223,31 +244,38 @@ class ApiService {
     required double completionRate7d,
     required List<Map<String, dynamic>> last7Days,
     required List<Map<String, dynamic>> history,
+    String? language,
   }) async {
     try {
       final url = Uri.parse('$baseUrl/persona');
+
+      final payload = <String, dynamic>{
+        'current_goal': goal,
+        'completion_rate_7d': completionRate7d,
+        'streak': streak,
+        'last7_days': last7Days
+            .map((d) => {
+                  'date': d['date'],
+                  'done': d['done'] == true,
+                })
+            .toList(),
+        'chat_history': history
+            .map((m) => {
+                  'role': m['role'],
+                  'text': m['text'],
+                })
+            .toList(),
+      };
+      final lang = (language ?? '').trim();
+      if (lang.isNotEmpty) {
+        payload['language'] = lang;
+      }
 
       final response = await http
           .post(
             url,
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'current_goal': goal,
-              'completion_rate_7d': completionRate7d,
-              'streak': streak,
-              'last7_days': last7Days
-                  .map((d) => {
-                        'date': d['date'],
-                        'done': d['done'] == true,
-                      })
-                  .toList(),
-              'chat_history': history
-                  .map((m) => {
-                        'role': m['role'],
-                        'text': m['text'],
-                      })
-                  .toList(),
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 15));
 
