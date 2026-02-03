@@ -102,6 +102,83 @@ flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
 flutter build apk --release
 ```
 
+### Frontend (Flutter Web) → Vercel (GitHub Actions CI/CD)
+
+This option builds Flutter Web in **GitHub Actions** and deploys the generated static site to **Vercel**.
+You do **not** need Flutter installed on Vercel.
+
+#### 1) Create a Vercel Project (one-time)
+- Create a new project in Vercel (Dashboard).
+- The deployment will be done by GitHub Actions using the Vercel CLI.
+
+#### 2) Add GitHub Actions secrets (one-time)
+In GitHub: **Settings → Secrets and variables → Actions → Secrets**, add:
+- `VERCEL_TOKEN` (used by GitHub Actions to authenticate to Vercel)
+- `VERCEL_ORG_ID` (tells GitHub Actions which Vercel team/org to deploy into)
+- `VERCEL_PROJECT_ID` (tells GitHub Actions which Vercel project to deploy)
+
+Important: these are **NOT** the same as app/runtime environment variables.
+
+- `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are only for **GitHub Actions → Vercel deployment authentication + selecting the target Vercel project**.
+- Things like **Gemini API key** belong to the backend (Railway) and are set in Railway variables.
+- Things like **API base URL** for the Flutter app are set as **GitHub Actions Variables** and baked into the web build via `--dart-define`.
+
+So: you do **not** put `VERCEL_TOKEN` etc into Vercel “Environment Variables” for the app. They live in **GitHub Secrets** so CI can deploy.
+
+How to get `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` (recommended):
+```bash
+cd frontend/flexifit_app
+npm i -g vercel
+vercel login
+vercel link
+
+# after linking, read IDs from:
+# .vercel/project.json
+```
+
+What is inside `.vercel/project.json` (example):
+```json
+{
+	"orgId": "team_xxxxxxxxxxxxxxxxx",
+	"projectId": "prj_xxxxxxxxxxxxxxxxx"
+}
+```
+
+How to get `VERCEL_TOKEN`:
+- Vercel Dashboard → your **Avatar/Profile** → **Settings** → **Tokens** → create a token.
+
+Alternative (Dashboard):
+- Vercel Dashboard → your Project → **Settings → General** → copy **Project ID**
+- For `VERCEL_ORG_ID`: open **Team/Account settings** (or use the `.vercel/project.json` method above)
+
+Tip: do **not** commit the `.vercel/` folder to git.
+
+#### 3) (Optional) Set GitHub Actions variables for build-time config
+In GitHub: **Settings → Secrets and variables → Actions → Variables**, add:
+- `API_BASE_URL` (example: `https://flexifit-production.up.railway.app`)
+- `SHOW_DEBUG_EVALS` (`false` recommended for prod)
+
+These are injected into `flutter build web` using `--dart-define`.
+
+Note: `--dart-define` is **build-time** for Flutter Web. Changing Vercel environment variables after deploy will **not** change the already-built web bundle.
+
+#### 4) Deploy
+- Push to `main`.
+- Workflow: `.github/workflows/deploy_flutter_web_vercel.yml` builds and deploys.
+
+Notes:
+- Flutter Web is a single-page app; we include a `vercel.json` route rule to rewrite unknown routes to `index.html`.
+- If your backend restricts CORS origins, add your Vercel domain to backend `CORS_ORIGINS`.
+
+#### Will the app still work as a static site?
+Yes. Flutter Web builds into a client-side single-page app (static HTML/CSS/JS). Features remain active because:
+- **Chat / persona / insights**: still call your backend over HTTPS (`API_BASE_URL`).
+- **Journey history / streak / local state**: stored in the browser (SharedPreferences → browser storage). It will persist on the same browser/device, but it won’t sync across devices unless you add a real database/auth later.
+
+Common gotchas on web:
+- Make sure backend **CORS** allows your Vercel domain.
+- Microphone / speech-to-text depends on browser support + HTTPS permissions.
+
 ## Key Features
 
 ✅ **Core MVP**: AI Negotiator with BJ Fogg methodology
