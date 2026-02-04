@@ -187,41 +187,131 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     return Scaffold(
-      backgroundColor: kIsWeb ? Colors.grey.shade100 : null,
       appBar: appBar,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          // For web on wide screens, constrain content width for readability.
-          if (!kIsWeb || constraints.maxWidth < 900) {
-            return content;
-          }
+      body: Stack(
+        children: [
+          if (kIsWeb) const _WebBackdrop(),
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (!kIsWeb || constraints.maxWidth < 900) {
+                  return content;
+                }
 
-          final height = constraints.maxHeight;
+                final height = constraints.maxHeight;
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _webMaxWidth),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: SizedBox(
-                  height: height - 32,
-                  child: Material(
-                    elevation: 2,
-                    borderRadius: BorderRadius.circular(16),
-                    clipBehavior: Clip.antiAlias,
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    child: MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        size: Size(_webMaxWidth, height - 32),
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: _webMaxWidth),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: SizedBox(
+                        height: height - 32,
+                        child: Material(
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(16),
+                          clipBehavior: Clip.antiAlias,
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          child: MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              size: Size(_webMaxWidth, height - 32),
+                            ),
+                            child: content,
+                          ),
+                        ),
                       ),
-                      child: content,
                     ),
                   ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebBackdrop extends StatelessWidget {
+  const _WebBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isWide = size.width >= 900;
+
+    final base = isDark ? const Color(0xFF0F1112) : const Color(0xFFF4FAF9);
+    final accentA = isDark
+        ? Colors.teal.withValues(alpha: 0.12)
+        : Colors.teal.withValues(alpha: 0.16);
+    final accentB = isDark
+        ? Colors.cyan.withValues(alpha: 0.10)
+        : Colors.cyan.withValues(alpha: 0.12);
+
+    return Positioned.fill(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: base,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              base,
+              (isDark ? const Color(0xFF12181A) : const Color(0xFFEAF7F4))
+                  .withValues(alpha: 0.92),
+              (isDark ? const Color(0xFF0B0F10) : const Color(0xFFF7FBFF))
+                  .withValues(alpha: 0.96),
+            ],
+          ),
+        ),
+        child: IgnorePointer(
+          child: Stack(
+            children: [
+              if (isWide)
+                Align(
+                  alignment: const Alignment(-1.0, -0.9),
+                  child: _BackdropBlob(color: accentA, size: 620),
+                ),
+              Align(
+                alignment: const Alignment(1.0, -0.8),
+                child: _BackdropBlob(color: accentB, size: 540),
+              ),
+              Align(
+                alignment: const Alignment(0.1, 1.0),
+                child: _BackdropBlob(
+                  color: Colors.tealAccent.withValues(alpha: isDark ? 0.08 : 0.10),
+                  size: 700,
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BackdropBlob extends StatelessWidget {
+  const _BackdropBlob({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            color,
+            color.withValues(alpha: 0.0),
+          ],
+        ),
       ),
     );
   }

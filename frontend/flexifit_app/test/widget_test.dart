@@ -11,7 +11,7 @@ import 'package:flexifit_app/main.dart';
 
 void main() {
   testWidgets('App boots to HomeScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(const FlexiFitApp());
+    await tester.pumpWidget(const FlexiFitApp(showWebIntro: false));
     await tester.pumpAndSettle();
 
     expect(find.text('FlexiFit Chat'), findsOneWidget);
