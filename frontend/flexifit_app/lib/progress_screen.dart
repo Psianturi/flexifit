@@ -623,23 +623,46 @@ class ProgressScreenState extends State<ProgressScreen> {
                                         scale: scale,
                                         child: child,
                                       ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.teal.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(18),
-                                          border: Border.all(
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(18),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.teal.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(18),
+                                            border: Border.all(
                                               color: isLegendary
                                                   ? Colors.amber.shade400
                                                   : Colors.teal.shade100,
-                                              width: isLegendary ? 2 : 1),
-                                        ),
-                                        child: Image.asset(
-                                          asset,
-                                          width: 140,
-                                          height: 140,
-                                          fit: BoxFit.contain,
+                                              width: isLegendary ? 2 : 1,
+                                            ),
+                                          ),
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Image.asset(
+                                                asset,
+                                                width: 140,
+                                                height: 140,
+                                                fit: BoxFit.contain,
+                                              ),
+                                              Positioned.fill(
+                                                child: _SoftShimmer(
+                                                  intensity: isLegendary
+                                                      ? 0.22
+                                                      : 0.14,
+                                                  period: const Duration(
+                                                    milliseconds: 2600,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          18),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1041,10 +1064,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _StatCard(
-                      title: 'Weekly Consistency',
-                      value: '${_completionRate7d.toStringAsFixed(0)}%',
-                      icon: Icons.show_chart,
+                    child: _WeeklyConsistencyCard(
+                      percent: _completionRate7d,
                     ),
                   ),
                 ],
@@ -1087,10 +1108,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                 ),
                 SizedBox(
                   width: col,
-                  child: _StatCard(
-                    title: 'Weekly Consistency',
-                    value: '${_completionRate7d.toStringAsFixed(0)}%',
-                    icon: Icons.show_chart,
+                  child: _WeeklyConsistencyCard(
+                    percent: _completionRate7d,
                   ),
                 ),
                 SizedBox(width: effectiveW, child: _TrendCard(trend: _trend7d)),
@@ -1191,10 +1210,144 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _TrendCard extends StatelessWidget {
+class _WeeklyConsistencyCard extends StatelessWidget {
+  final double percent;
+
+  const _WeeklyConsistencyCard({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = scheme.primary;
+    final normalized = (percent / 100.0).clamp(0.0, 1.0);
+
+    return _GlassCard(
+      tint: _cOpacity(accent, 0.06),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                gradient: LinearGradient(
+                  colors: [
+                    _cOpacity(accent, 0.18),
+                    _cOpacity(accent, 0.08),
+                  ],
+                ),
+                border: Border.all(color: _cOpacity(accent, 0.18)),
+              ),
+              child: Icon(Icons.show_chart, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Weekly Consistency',
+                    style: TextStyle(
+                      color: _cOpacity(scheme.onSurface, 0.65),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${percent.toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15.5,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: normalized),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) {
+                return SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 5,
+                        backgroundColor: _cOpacity(accent, 0.14),
+                        valueColor: AlwaysStoppedAnimation<Color>(accent),
+                      ),
+                      Text(
+                        '${(value * 100).round()}%',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: _cOpacity(scheme.onSurface, 0.72),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrendCard extends StatefulWidget {
   final List<Map<String, dynamic>> trend;
 
   const _TrendCard({required this.trend});
+
+  @override
+  State<_TrendCard> createState() => _TrendCardState();
+}
+
+class _TrendCardState extends State<_TrendCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  String _signature = '';
+
+  String _computeSignature(List<Map<String, dynamic>> trend) {
+    return trend
+        .map((d) => '${d['date']}:${d['done'] == true ? 1 : 0}')
+        .join('|');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _signature = _computeSignature(widget.trend);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TrendCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = _computeSignature(widget.trend);
+    if (next != _signature) {
+      _signature = next;
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1214,30 +1367,55 @@ class _TrendCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Row(
-              children: trend.map((d) {
+              children: widget.trend.asMap().entries.map((entry) {
+                final i = entry.key;
+                final d = entry.value;
                 final done = d['done'] == true;
                 final date = (d['date'] as String?) ?? '';
                 final label = date.length >= 5 ? date.substring(5) : date;
 
+                final start = (i * 0.07).clamp(0.0, 0.6);
+                final end = (start + 0.45).clamp(0.0, 1.0);
+                final anim = CurvedAnimation(
+                  parent: _controller,
+                  curve: Interval(start, end, curve: Curves.easeOutCubic),
+                );
+
                 return Expanded(
                   child: Column(
                     children: [
-                      Container(
-                        height: 22,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          gradient: done
-                              ? LinearGradient(
-                                  colors: [
-                                    Colors.green.shade400,
-                                    Colors.teal.shade400,
-                                  ],
-                                )
-                              : null,
-                          color:
-                              done ? null : _cOpacity(scheme.onSurface, 0.10),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                      AnimatedBuilder(
+                        animation: anim,
+                        builder: (context, _) {
+                          final v = anim.value;
+                          return Opacity(
+                            opacity: v,
+                            child: Transform.scale(
+                              alignment: Alignment.bottomCenter,
+                              scaleX: 1,
+                              scaleY: (v).clamp(0.01, 1.0),
+                              child: Container(
+                                height: 22,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 3),
+                                decoration: BoxDecoration(
+                                  gradient: done
+                                      ? LinearGradient(
+                                          colors: [
+                                            Colors.green.shade400,
+                                            Colors.teal.shade400,
+                                          ],
+                                        )
+                                      : null,
+                                  color: done
+                                      ? null
+                                      : _cOpacity(scheme.onSurface, 0.10),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -1250,9 +1428,83 @@ class _TrendCard extends StatelessWidget {
                     ],
                   ),
                 );
-              }).toList(),
+              }).toList(growable: false),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SoftShimmer extends StatefulWidget {
+  final double intensity;
+  final Duration period;
+  final BorderRadius borderRadius;
+
+  const _SoftShimmer({
+    required this.intensity,
+    required this.period,
+    required this.borderRadius,
+  });
+
+  @override
+  State<_SoftShimmer> createState() => _SoftShimmerState();
+}
+
+class _SoftShimmerState extends State<_SoftShimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.period)
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: widget.borderRadius,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            return AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final t = _controller.value;
+                final dx = (t * 2.2 - 1.1) * w;
+                return Opacity(
+                  opacity: widget.intensity,
+                  child: Transform.translate(
+                    offset: Offset(dx, 0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: const Alignment(-1, -0.2),
+                          end: const Alignment(1, 0.2),
+                          colors: [
+                            Colors.transparent,
+                            Colors.white,
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
         ),
       ),
     );

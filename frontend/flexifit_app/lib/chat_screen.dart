@@ -57,6 +57,8 @@ class ChatScreenState extends State<ChatScreen>
 
   bool _bootstrapped = false;
 
+  static const String _typingSentinel = '__FLEXIFIT_TYPING__';
+
   @override
   void initState() {
     super.initState();
@@ -137,7 +139,7 @@ class ChatScreenState extends State<ChatScreen>
 
     if (!mounted) return;
     setState(() {
-      _messages = loaded.reversed.toList(); // newest-first for DashChat
+      _messages = loaded.reversed.toList(); 
     });
   }
 
@@ -452,14 +454,46 @@ class ChatScreenState extends State<ChatScreen>
   Future<void> _persistChatHistory() async {
     final chronological = _messages.reversed.toList();
     final items = chronological.map((m) {
+      if (m.user.id == _aiUser.id && m.text == _typingSentinel) {
+        return null;
+      }
       return {
         'role': m.user.id == '1' ? 'user' : 'model',
         'text': m.text,
         'createdAt': m.createdAt.toIso8601String(),
       };
-    }).toList();
+    }).whereType<Map<String, dynamic>>().toList();
 
     await ProgressStore.setChatHistory(items);
+  }
+
+  bool _hasTypingIndicator() {
+    return _messages.any(
+      (m) => m.user.id == _aiUser.id && m.text == _typingSentinel,
+    );
+  }
+
+  void _showTypingIndicator() {
+    if (_hasTypingIndicator()) return;
+    setState(() {
+      _messages.insert(
+        0,
+        ChatMessage(
+          user: _aiUser,
+          createdAt: DateTime.now(),
+          text: _typingSentinel,
+        ),
+      );
+    });
+  }
+
+  void _hideTypingIndicator() {
+    if (!_hasTypingIndicator()) return;
+    setState(() {
+      _messages.removeWhere(
+        (m) => m.user.id == _aiUser.id && m.text == _typingSentinel,
+      );
+    });
   }
 
   Future<void> _onSend(ChatMessage message) async {
@@ -468,9 +502,11 @@ class ChatScreenState extends State<ChatScreen>
       _isLoading = true;
     });
 
+    _startLoadingAnimation();
+
     await _persistChatHistory();
 
-    _startLoadingAnimation();
+    _showTypingIndicator();
 
     final chronological = _messages.reversed.toList();
     final last10 = chronological.length > 10
@@ -499,6 +535,7 @@ class ChatScreenState extends State<ChatScreen>
     final responseText = result.response;
 
     _stopLoadingAnimation();
+    _hideTypingIndicator();
     setState(() {
       _isLoading = false;
     });
@@ -538,7 +575,7 @@ class ChatScreenState extends State<ChatScreen>
   void _extractAndShowDeal(String response) {
     setState(() {
       _showActionButtons = true;
-      // Extract habit from response (simple parsing)
+
       if (response.toLowerCase().contains('walk')) {
         _currentAgreedHabit = "today's walk";
       } else if (response.toLowerCase().contains('workout')) {
@@ -572,6 +609,10 @@ class ChatScreenState extends State<ChatScreen>
   void _stopLoadingAnimation() {
     _loadingTimer?.cancel();
     _loadingText = "FlexiFit is thinking...";
+  }
+
+  Widget _typingDots(Color color) {
+    return _TypingDots(color: color);
   }
 
   Widget _buildQuickReply(String text) {
@@ -760,7 +801,7 @@ class ChatScreenState extends State<ChatScreen>
                         currentUser: _currentUser,
                         onSend: _onSend,
                         messages: _messages,
-                        typingUsers: _isLoading ? [_aiUser] : [],
+                        typingUsers: const [],
                         inputOptions: InputOptions(
                           inputDecoration: InputDecoration(
                             hintText:
@@ -814,7 +855,6 @@ class ChatScreenState extends State<ChatScreen>
                               );
                             }
 
-                            // Hide current user avatar for a cleaner look.
                             return const SizedBox(width: 0, height: 0);
                           },
                           messageDecorationBuilder:
@@ -863,6 +903,17 @@ class ChatScreenState extends State<ChatScreen>
                           messageTextBuilder:
                               (message, previousMessage, nextMessage) {
                             final isMe = message.user.id == _currentUser.id;
+
+                            if (!isMe && message.text == _typingSentinel) {
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: _typingDots(
+                                  Colors.teal.withValues(alpha: 0.55),
+                                ),
+                              );
+                            }
+
                             return Text(
                               message.text,
                               style: TextStyle(
@@ -891,39 +942,54 @@ class ChatScreenState extends State<ChatScreen>
                         Container(
                           width: double.infinity,
                           margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.04),
+                            color: Colors.teal.shade50,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: Colors.black.withValues(alpha: 0.08)),
+                            border: Border.all(color: Colors.teal.shade100),
                           ),
-                          child: DefaultTextStyle(
-                            style: TextStyle(
-                              color: Colors.grey.shade800,
-                              fontSize: 12,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '🔍 Eval: empathy ${_lastEmpathyScore?.toStringAsFixed(0) ?? '?'} / 5'
-                                  '${_lastInitialEmpathyScore != null ? ' (initial ${_lastInitialEmpathyScore!.toStringAsFixed(0)}/5)' : ''}'
-                                  '${_lastRetryUsed == true ? ' • retry used' : ''}'
-                                  '${_lastPromptVersion != null ? ' • ${_lastPromptVersion!}' : ''}',
-                                ),
-                                if ((_lastEmpathyRationale ?? '')
-                                    .trim()
-                                    .isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _lastEmpathyRationale!,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.smart_toy_outlined,
+                                    size: 18,
+                                    color: Colors.teal.shade700,
                                   ),
-                                ]
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "Empathy ${_lastEmpathyScore != null ? "${_lastEmpathyScore!.toStringAsFixed(1)}/5" : "—"}"
+                                      "${_lastInitialEmpathyScore != null ? " (initial ${_lastInitialEmpathyScore!.toStringAsFixed(0)}/5)" : ""}"
+                                      "${_lastRetryUsed == true ? " • retry used" : ""}"
+                                      "${_lastPromptVersion != null ? " • ${_lastPromptVersion!}" : ""}",
+                                      style: TextStyle(
+                                        color: Colors.teal.shade800,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if ((_lastEmpathyRationale ?? '')
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  _lastEmpathyRationale!,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.teal.shade900
+                                        .withValues(alpha: 0.75),
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       if (_showActionButtons)
@@ -1097,6 +1163,81 @@ class ChatScreenState extends State<ChatScreen>
         ],
       ),
       body: withConfetti,
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  final Color color;
+
+  const _TypingDots({required this.color});
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final t = _controller.value * 2 * math.pi;
+
+        Widget dot(int i) {
+          final phase = i * 0.9;
+          final y = (math.sin(t + phase) + 1) / 2; // 0..1
+          final scale = 0.75 + (0.25 * y);
+          final opacity = 0.45 + (0.45 * y);
+
+          return Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(0, -2.5 * y),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            dot(0),
+            const SizedBox(width: 5),
+            dot(1),
+            const SizedBox(width: 5),
+            dot(2),
+          ],
+        );
+      },
     );
   }
 }
