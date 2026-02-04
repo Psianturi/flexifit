@@ -47,6 +47,34 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
     });
   }
 
+  Future<void> _archiveActiveGoal(String status) async {
+    final label = status == GoalStatus.completed ? 'Conquered' : 'Dropped';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Mark goal as $label?'),
+        content: const Text(
+          'This will archive your current goal and clear it from Chat/Progress until you set a new one.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    await ProgressStore.archiveActiveGoal(status: status);
+    await _reload();
+  }
+
   List<GoalModel> get _displayList {
     final items = _filtered;
     if (_filter != 'all') return items;
@@ -282,6 +310,30 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
                                               ),
                                             ),
                                           ),
+                                          if (g.isActive) ...[
+                                            const SizedBox(width: 6),
+                                            PopupMenuButton<String>(
+                                              tooltip: 'Goal actions',
+                                              onSelected: (value) {
+                                                if (value == GoalStatus.completed) {
+                                                  _archiveActiveGoal(GoalStatus.completed);
+                                                } else if (value == GoalStatus.dropped) {
+                                                  _archiveActiveGoal(GoalStatus.dropped);
+                                                }
+                                              },
+                                              itemBuilder: (context) => const [
+                                                PopupMenuItem(
+                                                  value: GoalStatus.completed,
+                                                  child: Text('Mark as completed'),
+                                                ),
+                                                PopupMenuItem(
+                                                  value: GoalStatus.dropped,
+                                                  child: Text('Mark as failed'),
+                                                ),
+                                              ],
+                                              icon: const Icon(Icons.more_vert),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                       const SizedBox(height: 8),

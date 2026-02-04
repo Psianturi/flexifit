@@ -35,6 +35,11 @@ class ProgressStore {
     return prefs.getString(goalKey);
   }
 
+  static Future<void> clearGoal() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(goalKey);
+  }
+
   static Future<void> setGoal(String goal) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = goal.trim();
@@ -251,6 +256,61 @@ class ProgressStore {
 
     await setGoalHistory(updated);
     await setGoal(next);
+  }
+
+  static Future<void> archiveActiveGoal({
+    required String status,
+    DateTime? now,
+  }) async {
+    final when = now ?? DateTime.now();
+    final normalized = GoalStatus.normalize(status);
+    if (normalized == GoalStatus.active) return;
+
+    final completions = await getCompletions();
+    final streak = computeStreak(completions, now: when);
+
+    final history = await getGoalHistory();
+    final hasActive = history.any((g) => g.status == GoalStatus.active);
+
+    // If we somehow have a current goal but no active entry, create one so it
+    // can be archived.
+    final currentGoal = (await getGoal())?.trim() ?? '';
+    final base = <GoalModel>[
+      if (!hasActive && currentGoal.isNotEmpty)
+        GoalModel(
+          id: when.millisecondsSinceEpoch.toString(),
+          title: currentGoal,
+          startDate: when,
+          endDate: null,
+          status: GoalStatus.active,
+          finalStreak: 0,
+        ),
+      ...history,
+    ];
+
+    final updated = <GoalModel>[];
+    var archivedOne = false;
+    for (final g in base) {
+      if (!archivedOne && g.status == GoalStatus.active) {
+        updated.add(
+          g.copyWith(
+            status: normalized,
+            endDate: when,
+            finalStreak: streak,
+          ),
+        );
+        archivedOne = true;
+        continue;
+      }
+      if (g.status == GoalStatus.active) {
+        // Keep only one active.
+        continue;
+      }
+      updated.add(g);
+    }
+
+    await setGoalHistory(updated);
+    await clearGoal();
   }
 
   static Future<int> getCompletedGoalsCount() async {
