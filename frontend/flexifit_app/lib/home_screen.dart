@@ -207,16 +207,47 @@ class _HomeScreenState extends State<HomeScreen>
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: SizedBox(
                         height: height - 32,
-                        child: Material(
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(16),
-                          clipBehavior: Clip.antiAlias,
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          child: MediaQuery(
-                            data: MediaQuery.of(context).copyWith(
-                              size: Size(_webMaxWidth, height - 32),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.white
+                                        : Colors.white)
+                                    .withValues(
+                                  alpha: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.04
+                                      : 0.35,
+                                ),
+                                blurRadius: 22,
+                                offset: const Offset(-8, -8),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? 0.50
+                                      : 0.12,
+                                ),
+                                blurRadius: 22,
+                                offset: const Offset(8, 8),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            elevation: 0,
+                            borderRadius: BorderRadius.circular(16),
+                            clipBehavior: Clip.antiAlias,
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            child: MediaQuery(
+                              data: MediaQuery.of(context).copyWith(
+                                size: Size(_webMaxWidth, height - 32),
+                              ),
+                              child: content,
                             ),
-                            child: content,
                           ),
                         ),
                       ),
@@ -281,7 +312,8 @@ class _WebBackdrop extends StatelessWidget {
               Align(
                 alignment: const Alignment(0.1, 1.0),
                 child: _BackdropBlob(
-                  color: Colors.tealAccent.withValues(alpha: isDark ? 0.08 : 0.10),
+                  color:
+                      Colors.tealAccent.withValues(alpha: isDark ? 0.08 : 0.10),
                   size: 700,
                 ),
               ),

@@ -401,6 +401,7 @@ class ProgressScreenState extends State<ProgressScreen> {
               final p = snapshot.data ?? _cachedPersona;
 
               if (!done || p == null) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
                 return SafeArea(
                   child: Center(
                     child: ConstrainedBox(
@@ -431,109 +432,132 @@ class ProgressScreenState extends State<ProgressScreen> {
                                 ),
                               ),
                             ),
-                            Material(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(22),
-                              clipBehavior: Clip.antiAlias,
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            'GENERATING…',
-                                            style: TextStyle(
-                                              letterSpacing: 1.2,
-                                              color: Colors.teal.shade800,
-                                              fontWeight: FontWeight.bold,
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        (isDark ? Colors.white : Colors.white)
+                                            .withValues(
+                                                alpha: isDark ? 0.04 : 0.30),
+                                    blurRadius: 22,
+                                    offset: const Offset(-8, -8),
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                        alpha: isDark ? 0.48 : 0.14),
+                                    blurRadius: 22,
+                                    offset: const Offset(8, 8),
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                clipBehavior: Clip.antiAlias,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(18),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              'GENERATING…',
+                                              style: TextStyle(
+                                                letterSpacing: 1.2,
+                                                color: Colors.teal.shade800,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Close',
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          icon: const Icon(Icons.close),
-                                        )
-                                      ],
-                                    ),
-                                    const SizedBox(height: 14),
-                                    Center(
-                                      child: TweenAnimationBuilder<double>(
-                                        tween: Tween(begin: 0.0, end: 1.0),
-                                        duration:
-                                            const Duration(milliseconds: 900),
-                                        curve: Curves.easeInOut,
-                                        builder: (context, value, child) {
-                                          return Transform.rotate(
-                                            angle: value * 6.28318,
-                                            child: child,
-                                          );
-                                        },
-                                        child: Container(
-                                          width: 120,
-                                          height: 120,
-                                          decoration: BoxDecoration(
-                                            color: Colors.teal.shade50,
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            border: Border.all(
-                                                color: Colors.teal.shade100),
-                                          ),
-                                          child: Center(
-                                            child: SizedBox(
-                                              width: 34,
-                                              height: 34,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 3,
-                                                color: Colors.teal.shade700,
+                                          IconButton(
+                                            tooltip: 'Close',
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            icon: const Icon(Icons.close),
+                                          )
+                                        ],
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Center(
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween(begin: 0.0, end: 1.0),
+                                          duration:
+                                              const Duration(milliseconds: 900),
+                                          curve: Curves.easeInOut,
+                                          builder: (context, value, child) {
+                                            return Transform.rotate(
+                                              angle: value * 6.28318,
+                                              child: child,
+                                            );
+                                          },
+                                          child: Container(
+                                            width: 120,
+                                            height: 120,
+                                            decoration: BoxDecoration(
+                                              color: Colors.teal.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              border: Border.all(
+                                                  color: Colors.teal.shade100),
+                                            ),
+                                            child: Center(
+                                              child: SizedBox(
+                                                width: 34,
+                                                height: 34,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 3,
+                                                  color: Colors.teal.shade700,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Unlocking your Flexi Identity…',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.grey.shade900,
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Unlocking your Flexi Identity…',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade900,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      "Analyzing your last 7 days + negotiation style.",
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                        height: 1.25,
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        "Analyzing your last 7 days + negotiation style.",
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                          height: 1.25,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: TweenAnimationBuilder<double>(
-                                        tween: Tween(begin: 0.05, end: 0.92),
-                                        duration:
-                                            const Duration(milliseconds: 1400),
-                                        curve: Curves.easeInOutCubic,
-                                        builder: (context, v, _) {
-                                          return LinearProgressIndicator(
-                                            minHeight: 10,
-                                            value: v,
-                                            backgroundColor:
-                                                Colors.grey.shade200,
-                                            color: Colors.teal,
-                                          );
-                                        },
+                                      const SizedBox(height: 14),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween(begin: 0.05, end: 0.92),
+                                          duration: const Duration(
+                                              milliseconds: 1400),
+                                          curve: Curves.easeInOutCubic,
+                                          builder: (context, v, _) {
+                                            return LinearProgressIndicator(
+                                              minHeight: 10,
+                                              value: v,
+                                              backgroundColor:
+                                                  Colors.grey.shade200,
+                                              color: Colors.teal,
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -550,6 +574,8 @@ class ProgressScreenState extends State<ProgressScreen> {
               final title = isLegendary
                   ? 'Legendary ${p.archetypeTitle}'
                   : p.archetypeTitle;
+
+              final isDark = Theme.of(context).brightness == Brightness.dark;
 
               return SafeArea(
                 child: Center(
@@ -582,175 +608,198 @@ class ProgressScreenState extends State<ProgressScreen> {
                             ),
                           ),
                           // Card
-                          Material(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            clipBehavior: Clip.antiAlias,
-                            child: Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'IDENTITY UNLOCKED',
-                                          style: TextStyle(
-                                            letterSpacing: 1.2,
-                                            color: Colors.teal.shade800,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Close',
-                                        onPressed: () => Navigator.pop(context),
-                                        icon: const Icon(Icons.close),
-                                      )
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Center(
-                                    child: TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: 0.92, end: 1.0),
-                                      duration:
-                                          const Duration(milliseconds: 520),
-                                      curve: Curves.easeOutBack,
-                                      builder: (context, scale, child) =>
-                                          Transform.scale(
-                                        scale: scale,
-                                        child: child,
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(18),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.teal.shade50,
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            border: Border.all(
-                                              color: isLegendary
-                                                  ? Colors.amber.shade400
-                                                  : Colors.teal.shade100,
-                                              width: isLegendary ? 2 : 1,
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isDark ? Colors.white : Colors.white)
+                                      .withValues(alpha: isDark ? 0.04 : 0.30),
+                                  blurRadius: 22,
+                                  offset: const Offset(-8, -8),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black
+                                      .withValues(alpha: isDark ? 0.48 : 0.14),
+                                  blurRadius: 22,
+                                  offset: const Offset(8, 8),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              clipBehavior: Clip.antiAlias,
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'IDENTITY UNLOCKED',
+                                            style: TextStyle(
+                                              letterSpacing: 1.2,
+                                              color: Colors.teal.shade800,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          child: Stack(
-                                            alignment: Alignment.center,
-                                            children: [
-                                              Image.asset(
-                                                asset,
-                                                width: 140,
-                                                height: 140,
-                                                fit: BoxFit.contain,
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Close',
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          icon: const Icon(Icons.close),
+                                        )
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Center(
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(begin: 0.92, end: 1.0),
+                                        duration:
+                                            const Duration(milliseconds: 520),
+                                        curve: Curves.easeOutBack,
+                                        builder: (context, scale, child) =>
+                                            Transform.scale(
+                                          scale: scale,
+                                          child: child,
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.teal.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              border: Border.all(
+                                                color: isLegendary
+                                                    ? Colors.amber.shade400
+                                                    : Colors.teal.shade100,
+                                                width: isLegendary ? 2 : 1,
                                               ),
-                                              Positioned.fill(
-                                                child: _SoftShimmer(
-                                                  intensity: isLegendary
-                                                      ? 0.22
-                                                      : 0.14,
-                                                  period: const Duration(
-                                                    milliseconds: 2600,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          18),
+                                            ),
+                                            child: Stack(
+                                              alignment: Alignment.center,
+                                              children: [
+                                                Image.asset(
+                                                  asset,
+                                                  width: 140,
+                                                  height: 140,
+                                                  fit: BoxFit.contain,
                                                 ),
-                                              ),
-                                            ],
+                                                Positioned.fill(
+                                                  child: _SoftShimmer(
+                                                    intensity: isLegendary
+                                                        ? 0.22
+                                                        : 0.14,
+                                                    period: const Duration(
+                                                      milliseconds: 2600,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            18),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    title,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    p.description,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade800,
-                                      height: 1.25,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.bolt, size: 18),
-                                      const SizedBox(width: 6),
-                                      const Text(
-                                        'Power Level',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      title,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
                                       ),
-                                      const Spacer(),
-                                      Text('${p.powerLevel}/100'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: 0.0, end: powerValue),
-                                      duration:
-                                          const Duration(milliseconds: 700),
-                                      curve: Curves.easeOutCubic,
-                                      builder: (context, value, _) {
-                                        return LinearProgressIndicator(
-                                          minHeight: 10,
-                                          value: value,
-                                          backgroundColor: Colors.grey.shade200,
-                                          color: Colors.teal,
-                                        );
-                                      },
                                     ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: () async {
-                                            final text =
-                                                '${p.archetypeTitle}\n${p.description}\nPower: ${p.powerLevel}/100';
-                                            await Clipboard.setData(
-                                              ClipboardData(text: text),
-                                            );
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                content:
-                                                    Text('Copied to clipboard'),
-                                              ),
-                                            );
-                                          },
-                                          icon: const Icon(Icons.copy),
-                                          label: const Text('Copy'),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      p.description,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.bolt, size: 18),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          'Power Level',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold),
                                         ),
+                                        const Spacer(),
+                                        Text('${p.powerLevel}/100'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: TweenAnimationBuilder<double>(
+                                        tween:
+                                            Tween(begin: 0.0, end: powerValue),
+                                        duration:
+                                            const Duration(milliseconds: 700),
+                                        curve: Curves.easeOutCubic,
+                                        builder: (context, value, _) {
+                                          return LinearProgressIndicator(
+                                            minHeight: 10,
+                                            value: value,
+                                            backgroundColor:
+                                                Colors.grey.shade200,
+                                            color: Colors.teal,
+                                          );
+                                        },
                                       ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: FilledButton.icon(
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          icon: const Icon(Icons.check_circle),
-                                          label: const Text('Nice!'),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () async {
+                                              final text =
+                                                  '${p.archetypeTitle}\n${p.description}\nPower: ${p.powerLevel}/100';
+                                              await Clipboard.setData(
+                                                ClipboardData(text: text),
+                                              );
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                      'Copied to clipboard'),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(Icons.copy),
+                                            label: const Text('Copy'),
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: FilledButton.icon(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            icon:
+                                                const Icon(Icons.check_circle),
+                                            label: const Text('Nice!'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -1222,6 +1271,7 @@ class _WeeklyConsistencyCard extends StatelessWidget {
     final normalized = (percent / 100.0).clamp(0.0, 1.0);
 
     return _GlassCard(
+      softRaised: true,
       tint: _cOpacity(accent, 0.06),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1353,6 +1403,7 @@ class _TrendCardState extends State<_TrendCard>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return _GlassCard(
+      softRaised: true,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1514,13 +1565,37 @@ class _SoftShimmerState extends State<_SoftShimmer>
 class _GlassCard extends StatelessWidget {
   final Widget child;
   final Color? tint;
+  final bool softRaised;
 
-  const _GlassCard({required this.child, this.tint});
+  const _GlassCard({required this.child, this.tint, this.softRaised = false});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final base = tint ?? _cOpacity(scheme.surface, 0.88);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final shadows = softRaised
+        ? [
+            BoxShadow(
+              color: (isDark ? Colors.white : Colors.white)
+                  .withValues(alpha: isDark ? 0.04 : 0.26),
+              blurRadius: 22,
+              offset: const Offset(-8, -8),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+              blurRadius: 22,
+              offset: const Offset(8, 8),
+            ),
+          ]
+        : [
+            BoxShadow(
+              color: _cOpacity(Colors.black, 0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            )
+          ];
 
     return Container(
       decoration: BoxDecoration(
@@ -1529,13 +1604,7 @@ class _GlassCard extends StatelessWidget {
         border: Border.all(
           color: _cOpacity(scheme.primary, 0.12),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: _cOpacity(Colors.black, 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          )
-        ],
+        boxShadow: shadows,
       ),
       child: child,
     );

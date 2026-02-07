@@ -4,6 +4,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home_screen.dart';
 
+List<BoxShadow> _softRaisedShadows({required bool isDark, double strength = 1}) {
+  // Hybrid neumorphism style shadows
+  final s = strength.clamp(0.0, 1.5).toDouble();
+
+  final light = isDark
+      ? Colors.white.withValues(alpha: 0.05 * s)
+      : Colors.white.withValues(alpha: 0.55 * s);
+  final dark = isDark
+      ? Colors.black.withValues(alpha: 0.55 * s)
+      : Colors.black.withValues(alpha: 0.10 * s);
+
+  return [
+    BoxShadow(
+      color: light,
+      blurRadius: 18 * s,
+      offset: Offset(-6 * s, -6 * s),
+    ),
+    BoxShadow(
+      color: dark,
+      blurRadius: 18 * s,
+      offset: Offset(6 * s, 6 * s),
+    ),
+  ];
+}
+
 class WebIntroScreen extends StatelessWidget {
   const WebIntroScreen({super.key});
 
@@ -58,21 +83,14 @@ class WebIntroScreen extends StatelessWidget {
                                 color: theme.colorScheme.outlineVariant
                                     .withValues(alpha: 0.45),
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 28,
-                                  offset: const Offset(0, 12),
-                                ),
-                              ],
+                              boxShadow:
+                                  _softRaisedShadows(isDark: isDark, strength: 1.0),
                             ),
                             child: LayoutBuilder(
                               builder: (context, inner) {
                                 final twoColumn = inner.maxWidth >= 860;
 
-                                final left = _IntroLeft(
-                                  onStart: () => _start(context),
-                                );
+                                final left = const _IntroLeft();
                                 final right = const _IntroRight();
 
                                 if (!twoColumn) {
@@ -83,16 +101,40 @@ class WebIntroScreen extends StatelessWidget {
                                       left,
                                       const SizedBox(height: 18),
                                       right,
+                                      const SizedBox(height: 18),
+                                      Align(
+                                        alignment: Alignment.center,
+                                        child: FilledButton.icon(
+                                          onPressed: () => _start(context),
+                                          icon: const Icon(Icons.arrow_forward),
+                                          label: const Text('Start'),
+                                        ),
+                                      ),
                                     ],
                                   );
                                 }
 
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    Expanded(child: left),
-                                    const SizedBox(width: 18),
-                                    SizedBox(width: 420, child: right),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(child: left),
+                                        const SizedBox(width: 18),
+                                        SizedBox(width: 420, child: right),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 18),
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: FilledButton.icon(
+                                        onPressed: () => _start(context),
+                                        icon: const Icon(Icons.arrow_forward),
+                                        label: const Text('Start'),
+                                      ),
+                                    ),
                                   ],
                                 );
                               },
@@ -121,9 +163,7 @@ class WebIntroScreen extends StatelessWidget {
 }
 
 class _IntroLeft extends StatelessWidget {
-  const _IntroLeft({required this.onStart});
-
-  final VoidCallback onStart;
+  const _IntroLeft();
 
   @override
   Widget build(BuildContext context) {
@@ -193,40 +233,53 @@ class _IntroLeft extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Text(
-          'Quick guide',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const _Bullet(text: 'Set 1 main goal (e.g., “Push up 100 times”).'),
-        const _Bullet(
-          text:
-              'Tell the coach your energy level, then pick a tiny step you can do today.',
-        ),
-        const _Bullet(
-          text:
-              'Use DONE/Undo to track today — goal status changes in Journey.',
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Note: FlexiFit is a coaching tool, not medical advice.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            FilledButton.icon(
-              onPressed: onStart,
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('Start'),
-            ),
-          ],
+        const SizedBox(height: 20),
+        Builder(
+          builder: (context) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.48),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.28),
+                ),
+                boxShadow: _softRaisedShadows(isDark: isDark, strength: 0.45),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Quick guide',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const _Bullet(
+                    text: 'Set 1 main goal (e.g., “Push up 100 times”).',
+                  ),
+                  const _Bullet(
+                    text:
+                        'Tell the coach your energy level, then pick a tiny step you can do today.',
+                  ),
+                  const _Bullet(
+                    text:
+                        'Use DONE/Undo to track today — goal status changes in Journey.',
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Note: FlexiFit is a coaching tool, not medical advice.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
@@ -304,6 +357,7 @@ class _FeatureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -312,6 +366,7 @@ class _FeatureCard extends StatelessWidget {
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.30),
         ),
+        boxShadow: _softRaisedShadows(isDark: isDark, strength: 0.45),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,6 +427,7 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -380,6 +436,7 @@ class _Pill extends StatelessWidget {
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
         ),
+        boxShadow: _softRaisedShadows(isDark: isDark, strength: 0.55),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

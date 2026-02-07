@@ -59,6 +59,56 @@ class ChatScreenState extends State<ChatScreen>
 
   static const String _typingSentinel = '__FLEXIFIT_TYPING__';
 
+  bool _looksLikeGoalCompletionClaim(String text) {
+    final t = text.toLowerCase().trim();
+    if (t.isEmpty) return false;
+
+    // Avoid triggering on partial progress.
+    const partialHints = [
+      'almost',
+      'nearly',
+      'half',
+      'partly',
+      'some',
+      'a bit',
+      'setengah',
+      'baru',
+      'masih',
+      'belum',
+      'hampir',
+      'dikit',
+      'sedikit',
+    ];
+    if (partialHints.any(t.contains)) return false;
+
+    const strongCompletion = [
+      'completed',
+      'i completed',
+      'i have completed',
+      'finished',
+      'i finished',
+      "i've finished",
+      'done',
+      'i am done',
+      "i'm done",
+      'sudah selesai',
+      'udah selesai',
+      'selesai',
+      'tuntas',
+      'berhasil',
+    ];
+    final hasCompletionVerb = strongCompletion.any(t.contains);
+    if (!hasCompletionVerb) return false;
+
+    // Require some context that implies full completion (today/goal/hari ini or a quantified unit).
+    final hasContext =
+        t.contains('today') || t.contains('hari ini') || t.contains('goal');
+    final hasUnits = RegExp(r'\b\d+\s*(km|kms|kilometer|steps|step|push\s*up|pushup|reps|rep|times|x|minutes|min|pages|page)\b')
+        .hasMatch(t);
+
+    return hasContext || hasUnits;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -139,7 +189,7 @@ class ChatScreenState extends State<ChatScreen>
 
     if (!mounted) return;
     setState(() {
-      _messages = loaded.reversed.toList(); 
+      _messages = loaded.reversed.toList();
     });
   }
 
@@ -453,16 +503,19 @@ class ChatScreenState extends State<ChatScreen>
 
   Future<void> _persistChatHistory() async {
     final chronological = _messages.reversed.toList();
-    final items = chronological.map((m) {
-      if (m.user.id == _aiUser.id && m.text == _typingSentinel) {
-        return null;
-      }
-      return {
-        'role': m.user.id == '1' ? 'user' : 'model',
-        'text': m.text,
-        'createdAt': m.createdAt.toIso8601String(),
-      };
-    }).whereType<Map<String, dynamic>>().toList();
+    final items = chronological
+        .map((m) {
+          if (m.user.id == _aiUser.id && m.text == _typingSentinel) {
+            return null;
+          }
+          return {
+            'role': m.user.id == '1' ? 'user' : 'model',
+            'text': m.text,
+            'createdAt': m.createdAt.toIso8601String(),
+          };
+        })
+        .whereType<Map<String, dynamic>>()
+        .toList();
 
     await ProgressStore.setChatHistory(items);
   }
@@ -506,6 +559,21 @@ class ChatScreenState extends State<ChatScreen>
 
     await _persistChatHistory();
 
+
+    try {
+      if (_looksLikeGoalCompletionClaim(message.text)) {
+        final alreadyDone = await ProgressStore.isDoneToday();
+        if (!alreadyDone && mounted) {
+          setState(() {
+            _showActionButtons = true;
+            _currentAgreedHabit = "today's goal";
+          });
+        }
+      }
+    } catch (_) {
+      // Never block chat flow on DONE detection.
+    }
+
     _showTypingIndicator();
 
     final chronological = _messages.reversed.toList();
@@ -534,17 +602,22 @@ class ChatScreenState extends State<ChatScreen>
 
     final responseText = result.response;
 
+    final dealMade = (result.dealMade == true) || responseText.contains('[DEAL_MADE]');
+    final dealLabel = (result.dealLabel ?? '').trim();
+
     _stopLoadingAnimation();
     _hideTypingIndicator();
     setState(() {
       _isLoading = false;
     });
 
-    // Check for DEAL_MADE tag
-    if (responseText.contains('[DEAL_MADE]')) {
-      String cleanResponse = responseText.replaceAll('[DEAL_MADE]', '').trim();
-      _playConfetti();
-      _extractAndShowDeal(cleanResponse);
+    // Confetti + marking DONE happens when the user accepts.
+    if (dealMade) {
+      final cleanResponse = responseText.replaceAll('[DEAL_MADE]', '').trim();
+      _extractAndShowDeal(
+        cleanResponse,
+        dealLabelOverride: dealLabel.isNotEmpty ? dealLabel : null,
+      );
       _addBotMessage(cleanResponse);
     } else {
       _addBotMessage(responseText);
@@ -572,18 +645,23 @@ class ChatScreenState extends State<ChatScreen>
     });
   }
 
-  void _extractAndShowDeal(String response) {
+  void _extractAndShowDeal(String response, {String? dealLabelOverride}) {
     setState(() {
       _showActionButtons = true;
 
-      if (response.toLowerCase().contains('walk')) {
-        _currentAgreedHabit = "today's walk";
-      } else if (response.toLowerCase().contains('workout')) {
-        _currentAgreedHabit = "today's workout";
-      } else if (response.toLowerCase().contains('read')) {
-        _currentAgreedHabit = "today's reading";
+      final override = (dealLabelOverride ?? '').trim();
+      if (override.isNotEmpty) {
+        _currentAgreedHabit = override;
       } else {
-        _currentAgreedHabit = "today's micro-habit";
+        if (response.toLowerCase().contains('walk')) {
+          _currentAgreedHabit = "today's walk";
+        } else if (response.toLowerCase().contains('workout')) {
+          _currentAgreedHabit = "today's workout";
+        } else if (response.toLowerCase().contains('read')) {
+          _currentAgreedHabit = "today's reading";
+        } else {
+          _currentAgreedHabit = "today's micro-habit";
+        }
       }
     });
   }
@@ -603,7 +681,7 @@ class ChatScreenState extends State<ChatScreen>
 
     // Add celebration message
     _addBotMessage(
-        "🎉 Amazing! Streak updated: $_streakCount days! You're building unstoppable momentum! 🔥");
+        "🎉 Deal accepted — marked DONE for today. Streak: $_streakCount days. Keep it going! 🔥");
   }
 
   void _stopLoadingAnimation() {
@@ -677,6 +755,7 @@ class ChatScreenState extends State<ChatScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final showDebug = AppConfig.showDebugEvals;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final showQuickReplies = !keyboardOpen && _messages.length <= 1;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1001,6 +1080,20 @@ class ChatScreenState extends State<ChatScreen>
                             color: Colors.green.shade50,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.green.shade200),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (isDark ? Colors.white : Colors.white)
+                                    .withValues(alpha: isDark ? 0.04 : 0.40),
+                                blurRadius: 16,
+                                offset: const Offset(-6, -6),
+                              ),
+                              BoxShadow(
+                                color: Colors.black
+                                    .withValues(alpha: isDark ? 0.45 : 0.10),
+                                blurRadius: 16,
+                                offset: const Offset(6, 6),
+                              ),
+                            ],
                           ),
                           child: Row(
                             children: [
@@ -1009,7 +1102,7 @@ class ChatScreenState extends State<ChatScreen>
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  "After you complete ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}, tap DONE.",
+                                  "Ready to lock in ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}? Tap Accept Deal to mark DONE today.",
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.green.shade800,
@@ -1029,7 +1122,7 @@ class ChatScreenState extends State<ChatScreen>
                               const SizedBox(width: 6),
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.check_circle),
-                                label: const Text("DONE"),
+                                label: const Text("Accept Deal"),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.green,
                                   foregroundColor: Colors.white,

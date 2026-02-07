@@ -353,11 +353,39 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    deal_made: Optional[bool] = None
+    deal_label: Optional[str] = None
     empathy_score: Optional[float] = None
     empathy_rationale: Optional[str] = None
     prompt_version: Optional[str] = None
     retry_used: Optional[bool] = None
     initial_empathy_score: Optional[float] = None
+
+
+_DEAL_TAG_RE = re.compile(r"<DEAL>(.*?)</DEAL>", re.IGNORECASE | re.DOTALL)
+
+
+def _extract_deal_meta(text: str) -> tuple[str, Optional[str]]:
+    """Extract an optional deal label embedded by the model.
+
+    The model may append a line like: <DEAL>put on your shoes</DEAL>
+    We strip the tag from the user-visible response and return deal_label.
+    """
+
+    raw = (text or "").strip()
+    if not raw:
+        return "", None
+
+    match = _DEAL_TAG_RE.search(raw)
+    if not match:
+        return raw, None
+
+    label = (match.group(1) or "").strip()
+    cleaned = _DEAL_TAG_RE.sub("", raw).strip()
+    # Clean up any leftover blank lines introduced by stripping.
+    cleaned = "\n".join([l.rstrip() for l in cleaned.splitlines() if l.strip()]).strip()
+
+    return cleaned, (label or None)
 
 class ProgressData(BaseModel):
     goal: str
@@ -454,6 +482,8 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
         prompt = (
             "You are FlexiFit. Follow the NEGOTIATION LOOP strictly.\n"
             "Return 2-3 short sentences max.\n\n"
+            "If you propose a specific micro-habit for today, append ONE final line exactly in this format: <DEAL>your micro-habit</DEAL>. "
+            "This deal line is metadata and does not count as a sentence.\n\n"
             f"GOAL: {goal}\n\n"
             f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
             f"NEW_MESSAGE (USER): {user_msg}\n"
@@ -533,6 +563,8 @@ def call_gemini_negotiator_retry(
         "- Validate feelings first\n"
         "- Propose ONE tiny, doable micro-habit\n"
         "- No judgement, no lecturing\n\n"
+        "If you propose a specific micro-habit for today, append ONE final line exactly in this format: <DEAL>your micro-habit</DEAL>. "
+        "This deal line is metadata and does not count as a sentence.\n\n"
         f"GOAL: {goal}\n\n"
         f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
         f"NEW_MESSAGE (USER): {user_msg}\n\n"
@@ -948,6 +980,10 @@ async def chat_endpoint(request: ChatRequest):
             history=request.chat_history
         )
 
+        cleaned_reply, deal_label = _extract_deal_meta(ai_reply)
+        deal_made = True if deal_label else False
+        ai_reply = cleaned_reply
+
         empathy_score: Optional[float] = None
         empathy_rationale: Optional[str] = None
         retry_used: bool = False
@@ -987,12 +1023,20 @@ async def chat_endpoint(request: ChatRequest):
                 empathy_rationale = str(judged2.get("rationale") or "").strip() or None
                 ai_reply = ai_reply_retry
                 retry_used = True
+
+                cleaned_retry, deal_label_retry = _extract_deal_meta(ai_reply)
+                ai_reply = cleaned_retry
+                if deal_label_retry:
+                    deal_label = deal_label_retry
+                    deal_made = True
         except Exception as e:
             logger.warning(f"⚠ Empathy eval skipped: {e}")
         
         logger.info(f"✓ Chat processed | Goal: {request.current_goal} | Reply length: {len(ai_reply)}")
         return ChatResponse(
             response=ai_reply,
+            deal_made=deal_made,
+            deal_label=deal_label,
             empathy_score=empathy_score,
             empathy_rationale=empathy_rationale,
             prompt_version=PROMPT_VERSION,

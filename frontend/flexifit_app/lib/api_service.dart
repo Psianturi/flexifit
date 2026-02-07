@@ -23,6 +23,8 @@ class WeeklyMotivationResult {
 
 class ChatResult {
   final String response;
+  final bool? dealMade;
+  final String? dealLabel;
   final double? empathyScore;
   final String? empathyRationale;
   final String? promptVersion;
@@ -31,6 +33,8 @@ class ChatResult {
 
   const ChatResult({
     required this.response,
+    this.dealMade,
+    this.dealLabel,
     this.empathyScore,
     this.empathyRationale,
     this.promptVersion,
@@ -89,6 +93,8 @@ class ApiService {
         final data = jsonDecode(response.body);
         return ChatResult(
           response: (data is Map ? data['response']?.toString() : null) ?? '',
+          dealMade: data is Map ? (data['deal_made'] == true) : null,
+          dealLabel: data is Map ? data['deal_label']?.toString() : null,
           empathyScore: data is Map && data['empathy_score'] is num
               ? (data['empathy_score'] as num).toDouble()
               : null,
