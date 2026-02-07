@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import inspect
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -9,7 +10,7 @@ from fastapi import Request
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import google.generativeai as genai
-from google.api_core.exceptions import DeadlineExceeded, Unauthenticated
+from google.api_core.exceptions import DeadlineExceeded, Unauthenticated, ResourceExhausted
 from dotenv import load_dotenv
 import logging
 
@@ -304,12 +305,9 @@ def _select_gemini_model() -> str:
         requested = requested[len("models/") :]
 
     preferred_candidates = [
-      
-        "gemini-3-flash",
-        "gemini-3.0-flash",
-        # Safe fallbacks (still Flash)
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-3-flash-preview",    
+        "gemini-2.5-flash",            # Stable, best price-performance
+        "gemini-2.5-flash-lite",      
     ]
 
     if requested:
@@ -319,6 +317,7 @@ def _select_gemini_model() -> str:
         for cand in preferred_candidates:
             try:
                 genai.get_model(f"models/{cand}")
+                logger.info(f"✓ Selected Gemini model: {cand}")
                 return cand
             except Exception as e:
                 logger.warning(f"Gemini model '{cand}' not available: {e}")
@@ -335,20 +334,42 @@ def _select_gemini_model() -> str:
             if short:
                 available.append(short)
 
-        for m in available:
-            if "flash" in m:
-                return m
+
+        for prefix in ("gemini-3-flash", "gemini-2.5-flash", "flash"):
+            for m in available:
+                if prefix in m:
+                    logger.info(f"✓ Selected Gemini model from list: {m}")
+                    return m
         if available:
             return available[0]
     except Exception as e:
         logger.warning(f"Could not list Gemini models: {e}")
 
-    return "gemini-3-flash"
+    return "gemini-2.5-flash"
 
 
 GEMINI_MODEL = _select_gemini_model()
 PROMPT_VERSION = (os.getenv("PROMPT_VERSION") or "v1").strip() or "v1"
 model = genai.GenerativeModel(model_name=GEMINI_MODEL, system_instruction=SYSTEM_INSTRUCTION)
+logger.info(f"Using Gemini model: {GEMINI_MODEL}")
+
+
+def _generate_with_retry(prompt, *, request_options=None, max_retries=3):
+    """Wrap model.generate_content with exponential back-off for 429 errors."""
+    opts = request_options or {"timeout": 25}
+    for attempt in range(max_retries + 1):
+        try:
+            response = model.generate_content(prompt, request_options=opts)
+            return response
+        except ResourceExhausted as e:
+            if attempt < max_retries:
+                wait = 2 ** attempt 
+                logger.warning(f"Rate limited (429), retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                logger.error("Rate limited (429) after all retries")
+                raise
+
 
 class ChatMessage(BaseModel):
     role: str
@@ -488,17 +509,48 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
 
     try:
         transcript = _history_to_transcript(history)
+
+        journey_start_idx = 0
+        for i, m in enumerate(history):
+            role = (m.role or "").strip().lower()
+            text = (m.text or "").lower()
+            if role in {"model", "assistant", "bot"} and "new journey started" in text:
+                journey_start_idx = i + 1
+
+        user_msg_count = sum(
+            1 for m in history[journey_start_idx:]
+            if (m.role or "").strip().lower() in {"user", "human"}
+        )
+
+        deal_instruction = (
+            "DEAL RULES (VERY IMPORTANT):\n"
+            "- You MAY empathise and propose tiny starter steps in early replies, but do NOT emit a <DEAL> tag yet.\n"
+            "- Only emit <DEAL> when ALL of these are true:\n"
+            "  1. At least 4 prior user messages exist in the chat history (not counting the current one).\n"
+            "  2. The user has AGREED or shown willingness to do the proposed action.\n"
+            "  3. The proposed action represents MEANINGFUL effort — roughly 55 % or more of the main goal.\n"
+            "     - If the goal contains a clear quantity + unit (e.g., 'Run 2 km', 'Read 40 pages'), then the deal MUST also include a quantity + the SAME unit, and it MUST be >= 55% of the goal.\n"
+            "     - NEVER emit a deal for tiny starter steps (e.g., 'put on your shoes', 'read two pages' for a 40-page goal).\n"
+            "     Examples: goal 'Run 2 km' -> deal 'Run 1 km' or 'Walk/jog 1.5 km'. Goal 'Read 40 pages' -> deal 'Read 22 pages'. Goal 'Sleep 5 hours' -> deal 'Sleep 3 hours'. NEVER 'lay down for 10 minutes' for a 5-hour sleep goal.\n"
+            "- Format: append ONE final line exactly as <DEAL>meaningful action</DEAL>. This line is metadata.\n\n"
+        )
+
+        if user_msg_count < 4:
+            deal_instruction += (
+                "CURRENT STATUS: Conversation just started (only {n} prior user messages). "
+                "Do NOT emit <DEAL> yet. Focus on empathy and understanding the user's situation.\n\n"
+            ).format(n=user_msg_count)
+
         prompt = (
             "You are FlexiFit. Follow the NEGOTIATION LOOP strictly.\n"
             "Return 2-3 short sentences max.\n\n"
-            "If you propose a specific micro-habit for today, append ONE final line exactly in this format: <DEAL>your micro-habit</DEAL>. "
-            "This deal line is metadata and does not count as a sentence.\n\n"
-            f"GOAL: {goal}\n\n"
+            + deal_instruction
+            + f"GOAL: {goal}\n\n"
             f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
             f"NEW_MESSAGE (USER): {user_msg}\n"
         )
 
-        response = model.generate_content(
+        response = _generate_with_retry(
             prompt,
             request_options={"timeout": 20},
         )
@@ -518,6 +570,9 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
     except Unauthenticated:
         logger.exception("Gemini authentication failed")
         raise HTTPException(status_code=401, detail="AI authentication failed. Check API key.")
+    except ResourceExhausted:
+        logger.warning("Gemini rate limited (429) after retries")
+        raise HTTPException(status_code=429, detail="AI is busy. Please wait a moment and try again.")
     except Exception as e:
         logger.exception("Unexpected error in Gemini call")
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)[:160]}")
@@ -564,6 +619,19 @@ def call_gemini_negotiator_retry(
         return "\n".join(lines)
 
     transcript = _history_to_transcript(history)
+    user_msg_count = sum(1 for m in history if (m.role or "").strip().lower() in {"user", "human"})
+
+    deal_clause = (
+        "If you propose a specific micro-habit for today that represents meaningful effort "
+        "(at least ~55%% of the main goal — NOT  a trivial starter step), "
+        "AND at least 4 prior user messages exist, "
+        "AND if the goal has a clear quantity+unit then the deal MUST match the unit and be >=55%%, "
+        "append ONE final line exactly as <DEAL>meaningful action</DEAL>. "
+        "This line is metadata and does not count as a sentence.\n"
+    )
+    if user_msg_count < 4:
+        deal_clause = "Do NOT emit a <DEAL> tag — conversation is too short.\n"
+
     prompt = (
         "You are FlexiFit. Your previous reply was judged as not empathetic enough. "
         "Rewrite it to be more validating and more micro-habit-focused, while staying concise.\n"
@@ -572,8 +640,7 @@ def call_gemini_negotiator_retry(
         "- Validate feelings first\n"
         "- Propose ONE tiny, doable micro-habit\n"
         "- No judgement, no lecturing\n\n"
-        "If you propose a specific micro-habit for today, append ONE final line exactly in this format: <DEAL>your micro-habit</DEAL>. "
-        "This deal line is metadata and does not count as a sentence.\n\n"
+        + deal_clause + "\n"
         f"GOAL: {goal}\n\n"
         f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n\n"
         f"NEW_MESSAGE (USER): {user_msg}\n\n"
@@ -582,7 +649,7 @@ def call_gemini_negotiator_retry(
         f"JUDGE_RATIONALE: {judge_rationale}\n"
     )
 
-    response = model.generate_content(
+    response = _generate_with_retry(
         prompt,
         request_options={"timeout": 20},
     )
@@ -623,7 +690,7 @@ def call_gemini_empathy_judge(user_text: str, ai_text: str) -> dict:
         f"AI: {ai_text}\n"
     )
 
-    response = model.generate_content(
+    response = _generate_with_retry(
         prompt,
         request_options={"timeout": 10},
     )
@@ -713,7 +780,7 @@ def call_gemini_progress_insights(
         f"CHAT_HISTORY:\n{transcript}\n"
     )
 
-    response = model.generate_content(
+    response = _generate_with_retry(
         prompt,
         request_options={"timeout": 10},
     )
@@ -746,7 +813,7 @@ def call_gemini_progress_insights(
             f"CHAT_HISTORY:\n{transcript}\n"
         )
         try:
-            retry = model.generate_content(
+            retry = _generate_with_retry(
                 retry_prompt,
                 request_options={"timeout": 10},
             )
@@ -807,7 +874,7 @@ def call_gemini_weekly_motivation(
         f"DONE_DAYS: {done_days}/{total_days}\n"
     )
 
-    response = model.generate_content(
+    response = _generate_with_retry(
         prompt,
         request_options={"timeout": 10},
     )
@@ -825,7 +892,7 @@ def call_gemini_weekly_motivation(
             f"TEXT: {text}\n"
         )
         try:
-            rewrite = model.generate_content(
+            rewrite = _generate_with_retry(
                 rewrite_prompt,
                 request_options={"timeout": 10},
             )
@@ -900,7 +967,7 @@ def call_gemini_persona(payload: PersonaRequest) -> dict:
         f"CHAT_HISTORY:\n{transcript if transcript else '(empty)'}\n"
     )
 
-    response = model.generate_content(
+    response = _generate_with_retry(
         prompt,
         request_options={"timeout": 12},
     )

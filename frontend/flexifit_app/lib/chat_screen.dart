@@ -60,6 +60,183 @@ class ChatScreenState extends State<ChatScreen>
   static const String _typingSentinel = '__FLEXIFIT_TYPING__';
   static const String _logoAssetPath = 'assets/logo/flexifit-logo.png';
 
+  static const int _dealMinRecentUserMessages = 3;
+
+  double? _tryParseNumberToken(String token) {
+    final normalized = token.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    final direct = double.tryParse(normalized.replaceAll(',', '.'));
+    if (direct != null) return direct;
+
+    const wordToNum = {
+      'a': 1,
+      'an': 1,
+      'one': 1,
+      'two': 2,
+      'three': 3,
+      'four': 4,
+      'five': 5,
+      'six': 6,
+      'seven': 7,
+      'eight': 8,
+      'nine': 9,
+      'ten': 10,
+      'satu': 1,
+      'dua': 2,
+      'tiga': 3,
+      'empat': 4,
+      'lima': 5,
+      'enam': 6,
+      'tujuh': 7,
+      'delapan': 8,
+      'sembilan': 9,
+      'sepuluh': 10,
+    };
+    final mapped = wordToNum[normalized];
+    if (mapped == null) return null;
+    return mapped.toDouble();
+  }
+
+  String? _normalizeUnit(String raw) {
+    final u = raw.trim().toLowerCase();
+    if (u.isEmpty) return null;
+
+    if (u == 'km' || u == 'kms' || u == 'kilometer' || u == 'kilometers') {
+      return 'km';
+    }
+    if (u == 'page' || u == 'pages' || u == 'halaman') {
+      return 'pages';
+    }
+    if (u == 'min' || u == 'mins' || u == 'minute' || u == 'minutes') {
+      return 'minutes';
+    }
+    if (u == 'hour' || u == 'hours' || u == 'jam') {
+      return 'hours';
+    }
+    if (u == 'step' || u == 'steps') {
+      return 'steps';
+    }
+    return null;
+  }
+
+  /// Normalize time units to minutes for fair comparison.
+  ({double value, String unit}) _toComparableUnit(double value, String unit) {
+    if (unit == 'hours') return (value: value * 60, unit: 'minutes');
+    return (value: value, unit: unit);
+  }
+
+  ({double value, String unit})? _extractQuantityUnit(String text) {
+    final t = text.toLowerCase();
+
+    // Prefer explicit numeric quantities.
+    final numeric = RegExp(
+            r'\b(\d+(?:[\.,]\d+)?)\s*(km|kms|kilometer|kilometers|page|pages|halaman|min|mins|minute|minutes|hour|hours|jam|step|steps)\b')
+        .firstMatch(t);
+    if (numeric != null) {
+      final value = _tryParseNumberToken(numeric.group(1) ?? '');
+      final unit = _normalizeUnit(numeric.group(2) ?? '');
+      if (value != null && unit != null && value > 0) {
+        return _toComparableUnit(value, unit);
+      }
+    }
+
+    // Fallback: number words right before a unit (e.g., 'two pages').
+    final word = RegExp(
+            r'\b(a|an|one|two|three|four|five|six|seven|eight|nine|ten|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh)\s*(km|kms|kilometer|kilometers|page|pages|halaman|min|mins|minute|minutes|hour|hours|jam|step|steps)\b')
+        .firstMatch(t);
+    if (word != null) {
+      final value = _tryParseNumberToken(word.group(1) ?? '');
+      final unit = _normalizeUnit(word.group(2) ?? '');
+      if (value != null && unit != null && value > 0) {
+        return _toComparableUnit(value, unit);
+      }
+    }
+
+    return null;
+  }
+
+  String? _inferGoalDomain(String text) {
+    final t = text.toLowerCase();
+    if (RegExp(r'\b(read|reading|book|baca|halaman|page|pages)\b')
+        .hasMatch(t)) {
+      return 'read';
+    }
+    if (RegExp(
+            r'\b(run|running|jog|jogging|lari|walk|walking|jalan|steps|step|km|kilometer)\b')
+        .hasMatch(t)) {
+      return 'move';
+    }
+    if (RegExp(
+            r'\b(workout|exercise|push\s*up|pushup|sit\s*up|situp|gym|angkat)\b')
+        .hasMatch(t)) {
+      return 'workout';
+    }
+    if (RegExp(r'\b(sleep|sleeping|tidur|nap|rest|istirahat)\b').hasMatch(t)) {
+      return 'sleep';
+    }
+    if (RegExp(r'\b(meditat|meditasi|yoga|stretch|peregangan)\b').hasMatch(t)) {
+      return 'wellness';
+    }
+    return null;
+  }
+
+  bool _sameDomainOrUnknown(String goal, String dealLabel) {
+    final domain = _inferGoalDomain(goal);
+    if (domain == null) return true;
+
+    final t = dealLabel.toLowerCase();
+    switch (domain) {
+      case 'read':
+        return RegExp(r'\b(read|reading|baca|halaman|page|pages|book)\b')
+            .hasMatch(t);
+      case 'move':
+        return RegExp(
+                r'\b(run|running|jog|jogging|lari|walk|walking|jalan|steps|step|km|kilometer)\b')
+            .hasMatch(t);
+      case 'workout':
+        return RegExp(
+                r'\b(workout|exercise|push\s*up|pushup|sit\s*up|situp|gym|angkat)\b')
+            .hasMatch(t);
+      case 'sleep':
+        return RegExp(
+                r'\b(sleep|sleeping|tidur|nap|rest|istirahat|lay\s*down|close.*eyes|berbaring|tutup.*mata)\b')
+            .hasMatch(t);
+      case 'wellness':
+        return RegExp(
+                r'\b(meditat|meditasi|yoga|stretch|peregangan|relax|rileks)\b')
+            .hasMatch(t);
+    }
+    return true;
+  }
+
+  bool _shouldShowDealBanner({
+    required String goal,
+    required String dealLabel,
+    required int recentUserMsgCount,
+  }) {
+    final label = dealLabel.trim();
+    if (label.isEmpty) return false;
+    if (recentUserMsgCount < _dealMinRecentUserMessages) return false;
+
+    if (!_sameDomainOrUnknown(goal, label)) return false;
+
+    final goalMeasure = _extractQuantityUnit(goal);
+    final dealMeasure = _extractQuantityUnit(label);
+
+    // If the goal is quantified, require the deal to also be quantified.
+    if (goalMeasure != null && dealMeasure == null) return false;
+
+    // If both are quantified, require same unit and at least 50%.
+    if (goalMeasure != null && dealMeasure != null) {
+      if (goalMeasure.unit != dealMeasure.unit) return false;
+      final ratio = dealMeasure.value / goalMeasure.value;
+      if (ratio < 0.50) return false;
+    }
+
+    return true;
+  }
+
   bool _looksLikeGoalCompletionClaim(String text) {
     final t = text.toLowerCase().trim();
     if (t.isEmpty) return false;
@@ -570,6 +747,9 @@ class ChatScreenState extends State<ChatScreen>
     setState(() {
       _messages.insert(0, message);
       _isLoading = true;
+
+      _showActionButtons = false;
+      _currentAgreedHabit = '';
     });
 
     _startLoadingAnimation();
@@ -594,6 +774,23 @@ class ChatScreenState extends State<ChatScreen>
     final last10 = chronological.length > 10
         ? chronological.sublist(chronological.length - 10)
         : chronological;
+
+    // Find the latest "New journey started!" bot message to scope counting.
+    // Only user messages AFTER that point count toward the deal gate.
+    int journeyStart = 0;
+    for (int i = last10.length - 1; i >= 0; i--) {
+      final m = last10[i];
+      if (m.user.id != _currentUser.id &&
+          m.text.toLowerCase().contains('new journey started')) {
+        journeyStart = i + 1;
+        break;
+      }
+    }
+    final sinceJourney = last10.sublist(journeyStart);
+
+    final recentUserMsgCount = sinceJourney
+        .where((m) => m.user.id == _currentUser.id && m.text != _typingSentinel)
+        .length;
 
     final historyPayload = last10.map((m) {
       return {
@@ -620,6 +817,14 @@ class ChatScreenState extends State<ChatScreen>
         (result.dealMade == true) || responseText.contains('[DEAL_MADE]');
     final dealLabel = (result.dealLabel ?? '').trim();
 
+    final visibleResponse = responseText.replaceAll('[DEAL_MADE]', '').trim();
+    final showDealBanner = dealMade &&
+        _shouldShowDealBanner(
+          goal: _userGoal ?? '',
+          dealLabel: dealLabel,
+          recentUserMsgCount: recentUserMsgCount,
+        );
+
     _stopLoadingAnimation();
     _hideTypingIndicator();
     setState(() {
@@ -627,15 +832,14 @@ class ChatScreenState extends State<ChatScreen>
     });
 
     // Confetti + marking DONE happens when the user accepts.
-    if (dealMade) {
-      final cleanResponse = responseText.replaceAll('[DEAL_MADE]', '').trim();
+    if (showDealBanner) {
       _extractAndShowDeal(
-        cleanResponse,
+        visibleResponse,
         dealLabelOverride: dealLabel.isNotEmpty ? dealLabel : null,
       );
-      _addBotMessage(cleanResponse);
+      _addBotMessage(visibleResponse);
     } else {
-      _addBotMessage(responseText);
+      _addBotMessage(visibleResponse);
     }
   }
 
@@ -778,12 +982,14 @@ class ChatScreenState extends State<ChatScreen>
     final maxContentWidth = isTabletWide ? 860.0 : double.infinity;
     final maxBubbleWidth = math.min(screenWidth * 0.68, 520.0);
 
+    final isCompactWidth = screenWidth < 420;
+
     final debugHasData = showDebug &&
         (_lastEmpathyScore != null || _lastEmpathyRationale != null);
 
     double reservedBottom = 0;
     if (_isLoading) reservedBottom += 40;
-    if (_showActionButtons) reservedBottom += 86;
+    if (_showActionButtons) reservedBottom += isCompactWidth ? 124 : 84;
     if (debugHasData) reservedBottom += 78;
 
     final content = Column(
@@ -1089,32 +1295,37 @@ class ChatScreenState extends State<ChatScreen>
                       if (_showActionButtons)
                         Container(
                           width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: Colors.green.shade200),
                             boxShadow: [
                               BoxShadow(
                                 color: (isDark ? Colors.white : Colors.white)
-                                    .withValues(alpha: isDark ? 0.04 : 0.40),
-                                blurRadius: 16,
-                                offset: const Offset(-6, -6),
+                                    .withValues(alpha: isDark ? 0.04 : 0.30),
+                                blurRadius: 10,
+                                offset: const Offset(-4, -4),
                               ),
                               BoxShadow(
                                 color: Colors.black
-                                    .withValues(alpha: isDark ? 0.45 : 0.10),
-                                blurRadius: 16,
-                                offset: const Offset(6, 6),
+                                    .withValues(alpha: isDark ? 0.40 : 0.08),
+                                blurRadius: 10,
+                                offset: const Offset(4, 4),
                               ),
                             ],
                           ),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
                               final isNarrow = constraints.maxWidth < 360;
+                              final habitLabel =
+                                  _currentAgreedHabit.trim().isEmpty
+                                      ? "today's micro-habit"
+                                      : _currentAgreedHabit;
                               final message =
-                                  "Ready to lock in ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}? Tap Accept Deal to mark DONE today.";
+                                  "Ready to lock in $habitLabel? Tap Accept Deal to mark DONE today.";
 
                               void dismiss() {
                                 setState(() {
@@ -1126,30 +1337,46 @@ class ChatScreenState extends State<ChatScreen>
                                 return Row(
                                   children: [
                                     Icon(Icons.handshake,
-                                        color: Colors.green.shade700),
-                                    const SizedBox(width: 8),
+                                        size: 18, color: Colors.green.shade700),
+                                    const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         message,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
                                           color: Colors.green.shade800,
                                         ),
                                       ),
                                     ),
-                                    IconButton(
-                                      tooltip: 'Dismiss',
-                                      onPressed: dismiss,
-                                      icon: Icon(Icons.close,
-                                          color: Colors.green.shade700),
+                                    SizedBox(
+                                      width: 28,
+                                      height: 28,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        tooltip: 'Dismiss',
+                                        onPressed: dismiss,
+                                        iconSize: 18,
+                                        icon: Icon(Icons.close,
+                                            color: Colors.green.shade700),
+                                      ),
                                     ),
-                                    const SizedBox(width: 6),
+                                    const SizedBox(width: 4),
                                     ElevatedButton.icon(
-                                      icon: const Icon(Icons.check_circle),
-                                      label: const Text("Accept Deal"),
+                                      icon: const Icon(Icons.check_circle,
+                                          size: 16),
+                                      label: const Text("Accept Deal",
+                                          style: TextStyle(fontSize: 12)),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.green,
                                         foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 6),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: _markAsDone,
                                     ),
@@ -1157,14 +1384,17 @@ class ChatScreenState extends State<ChatScreen>
                                 );
                               }
 
+                              // ── Narrow / mobile layout ──
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Row(
                                     children: [
                                       Icon(Icons.handshake,
+                                          size: 16,
                                           color: Colors.green.shade700),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
                                           'Deal ready',
@@ -1172,35 +1402,51 @@ class ChatScreenState extends State<ChatScreen>
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
+                                            fontSize: 12.5,
                                             color: Colors.green.shade800,
                                           ),
                                         ),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Dismiss',
-                                        onPressed: dismiss,
-                                        icon: Icon(Icons.close,
-                                            color: Colors.green.shade700),
+                                      SizedBox(
+                                        width: 26,
+                                        height: 26,
+                                        child: IconButton(
+                                          padding: EdgeInsets.zero,
+                                          tooltip: 'Dismiss',
+                                          onPressed: dismiss,
+                                          iconSize: 16,
+                                          icon: Icon(Icons.close,
+                                              color: Colors.green.shade700),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 2),
                                   Text(
                                     message,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11.5,
                                       color: Colors.green.shade800,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 6),
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.check_circle),
-                                      label: const Text("Accept Deal"),
+                                      icon: const Icon(Icons.check_circle,
+                                          size: 16),
+                                      label: const Text("Accept Deal",
+                                          style: TextStyle(fontSize: 12.5)),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.green,
                                         foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        minimumSize:
+                                            const Size(double.infinity, 34),
                                       ),
                                       onPressed: _markAsDone,
                                     ),
