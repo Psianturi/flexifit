@@ -298,22 +298,36 @@ FEW-SHOT EXAMPLES:
 
 
 def _select_gemini_model() -> str:
+    """Select a Flash model, preferring Gemini 3 Flash.
+    """
+
     requested = (os.getenv("GEMINI_MODEL") or "").strip()
     if requested.startswith("models/"):
         requested = requested[len("models/") :]
 
-    # 1) Try requested model if provided.
-    if requested:
-        try:
-            if hasattr(genai, "get_model"):
-                genai.get_model(f"models/{requested}")
-            return requested
-        except Exception as e:
-            logger.warning(f"Requested GEMINI_MODEL '{requested}' not available: {e}")
+    preferred_candidates = [
+      
+        "gemini-3-flash",
+        "gemini-3.0-flash",
+        # Safe fallbacks (still Flash)
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+    ]
 
-    # 2) Otherwise, pick the first model that supports generateContent.
+    if requested:
+        preferred_candidates.insert(0, requested)
+
+    if hasattr(genai, "get_model"):
+        for cand in preferred_candidates:
+            try:
+                genai.get_model(f"models/{cand}")
+                return cand
+            except Exception as e:
+                logger.warning(f"Gemini model '{cand}' not available: {e}")
+
+
     try:
-        available = []
+        available: List[str] = []
         for m in genai.list_models():
             name = getattr(m, "name", "") or ""
             methods = getattr(m, "supported_generation_methods", []) or []
@@ -323,18 +337,15 @@ def _select_gemini_model() -> str:
             if short:
                 available.append(short)
 
-        # Prefer flash models first for speed/cost.
-        for preferred in ("flash", "pro"):
-            for m in available:
-                if preferred in m:
-                    return m
+        for m in available:
+            if "flash" in m:
+                return m
         if available:
             return available[0]
     except Exception as e:
         logger.warning(f"Could not list Gemini models: {e}")
 
-    # 3) Last resort fallback.
-    return "gemini-pro"
+    return "gemini-3-flash"
 
 
 GEMINI_MODEL = _select_gemini_model()
@@ -1056,7 +1067,7 @@ async def progress_endpoint(request: ChatRequest) -> ProgressResponse:
     """
     Endpoint to analyze chat history and extract progress metrics.
     - Analyzes conversations to extract completion rate
-    - Opik logs this analysis for hackathon evaluation
+    - Opik logs this analysis for evaluation/observability
     """
     try:
         if not request.current_goal.strip():
