@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   static const double _webMaxWidth = 720.0;
+  static const String _logoAssetPath = 'assets/logo/flexifit-logo.png';
 
   late final TabController _tabController;
 
@@ -63,7 +64,18 @@ class _HomeScreenState extends State<HomeScreen>
     PreferredSizeWidget appBar;
     if (!isWideWeb) {
       appBar = AppBar(
-        title: Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
+        title: Row(
+          children: [
+            _LogoMark(assetPath: _logoAssetPath, size: 32),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -120,6 +132,8 @@ class _HomeScreenState extends State<HomeScreen>
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
+                  _LogoMark(assetPath: _logoAssetPath, size: 28),
+                  const SizedBox(width: 10),
                   Expanded(
                     child:
                         Text(isChatTab ? 'FlexiFit Chat' : 'FlexiFit Progress'),
@@ -258,6 +272,41 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LogoMark extends StatelessWidget {
+  final String assetPath;
+  final double size;
+
+  const _LogoMark({
+    required this.assetPath,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Transform.scale(
+        scale: 1.12,
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              Icons.fitness_center,
+              color: theme.colorScheme.primary,
+              size: size * 0.70,
+            );
+          },
+        ),
       ),
     );
   }

@@ -58,6 +58,7 @@ class ChatScreenState extends State<ChatScreen>
   bool _bootstrapped = false;
 
   static const String _typingSentinel = '__FLEXIFIT_TYPING__';
+  static const String _logoAssetPath = 'assets/logo/flexifit-logo.png';
 
   bool _looksLikeGoalCompletionClaim(String text) {
     final t = text.toLowerCase().trim();
@@ -1233,7 +1234,13 @@ class ChatScreenState extends State<ChatScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("FlexiFit"),
+        title: Row(
+          children: [
+            _LogoMark(assetPath: _logoAssetPath, size: 32),
+            const SizedBox(width: 10),
+            const Text("FlexiFit"),
+          ],
+        ),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(28),
           child: Padding(
@@ -1256,6 +1263,41 @@ class ChatScreenState extends State<ChatScreen>
         ],
       ),
       body: withConfetti,
+    );
+  }
+}
+
+class _LogoMark extends StatelessWidget {
+  final String assetPath;
+  final double size;
+
+  const _LogoMark({
+    required this.assetPath,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Transform.scale(
+        scale: 1.12,
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              Icons.fitness_center,
+              color: theme.colorScheme.primary,
+              size: size * 0.70,
+            );
+          },
+        ),
+      ),
     );
   }
 }

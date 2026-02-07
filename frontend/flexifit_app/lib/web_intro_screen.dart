@@ -165,6 +165,8 @@ class WebIntroScreen extends StatelessWidget {
 class _IntroLeft extends StatelessWidget {
   const _IntroLeft();
 
+  static const String _logoAssetPath = 'assets/logo/flexifit-logo.png';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -175,20 +177,35 @@ class _IntroLeft extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 54,
-              height: 54,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.teal.withValues(alpha: 0.75),
-                    Colors.cyan.withValues(alpha: 0.65),
-                  ],
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.85),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
                 ),
               ),
-              child: const Icon(
-                Icons.fitness_center,
-                color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: Transform.scale(
+                  scale: 1.28,
+                  child: Image.asset(
+                    _logoAssetPath,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                    filterQuality: FilterQuality.high,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.fitness_center,
+                        color: theme.colorScheme.primary,
+                        size: 26,
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 12),
