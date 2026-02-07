@@ -298,8 +298,6 @@ FEW-SHOT EXAMPLES:
 
 
 def _select_gemini_model() -> str:
-    """Select a Flash model, preferring Gemini 3 Flash.
-    """
 
     requested = (os.getenv("GEMINI_MODEL") or "").strip()
     if requested.startswith("models/"):

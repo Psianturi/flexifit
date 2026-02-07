@@ -168,7 +168,7 @@ class _JourneyHistoryScreenState extends State<JourneyHistoryScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            _LogoMark(assetPath: _logoAssetPath, size: 30),
+            _LogoMark(assetPath: _logoAssetPath, size: 34),
             const SizedBox(width: 10),
             const Text('Your Journey'),
           ],

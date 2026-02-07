@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen>
       appBar = AppBar(
         title: Row(
           children: [
-            _LogoMark(assetPath: _logoAssetPath, size: 32),
+            _LogoMark(assetPath: _logoAssetPath, size: 35),
             const SizedBox(width: 10),
             Flexible(
               child: Text(
@@ -132,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen>
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  _LogoMark(assetPath: _logoAssetPath, size: 28),
+                  _LogoMark(assetPath: _logoAssetPath, size: 35),
                   const SizedBox(width: 10),
                   Expanded(
                     child:

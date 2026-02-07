@@ -402,6 +402,20 @@ class ProgressScreenState extends State<ProgressScreen> {
 
               if (!done || p == null) {
                 final isDark = Theme.of(context).brightness == Brightness.dark;
+                final scheme = Theme.of(context).colorScheme;
+                final cardBg =
+                    isDark ? scheme.surfaceContainerHighest : Colors.white;
+                final headerColor =
+                    isDark ? scheme.primary : Colors.teal.shade800;
+                final textColor = scheme.onSurface;
+                final subtitleColor = scheme.onSurfaceVariant;
+                final loaderBg =
+                    isDark ? scheme.surfaceContainerHigh : Colors.teal.shade50;
+                final loaderBorder = isDark
+                    ? scheme.primary.withValues(alpha: 0.3)
+                    : Colors.teal.shade100;
+                final progressBg =
+                    isDark ? scheme.surfaceContainerHigh : Colors.grey.shade200;
                 return SafeArea(
                   child: Center(
                     child: ConstrainedBox(
@@ -453,7 +467,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                 ],
                               ),
                               child: Material(
-                                color: Colors.white,
+                                color: cardBg,
                                 borderRadius: BorderRadius.circular(22),
                                 clipBehavior: Clip.antiAlias,
                                 child: Padding(
@@ -470,7 +484,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                               'GENERATING…',
                                               style: TextStyle(
                                                 letterSpacing: 1.2,
-                                                color: Colors.teal.shade800,
+                                                color: headerColor,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -479,7 +493,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                                             tooltip: 'Close',
                                             onPressed: () =>
                                                 Navigator.pop(context),
-                                            icon: const Icon(Icons.close),
+                                            icon: Icon(Icons.close,
+                                                color: scheme.onSurfaceVariant),
                                           )
                                         ],
                                       ),
@@ -500,11 +515,11 @@ class ProgressScreenState extends State<ProgressScreen> {
                                             width: 120,
                                             height: 120,
                                             decoration: BoxDecoration(
-                                              color: Colors.teal.shade50,
+                                              color: loaderBg,
                                               borderRadius:
                                                   BorderRadius.circular(18),
                                               border: Border.all(
-                                                  color: Colors.teal.shade100),
+                                                  color: loaderBorder),
                                             ),
                                             child: Center(
                                               child: SizedBox(
@@ -513,7 +528,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                                 child:
                                                     CircularProgressIndicator(
                                                   strokeWidth: 3,
-                                                  color: Colors.teal.shade700,
+                                                  color: scheme.primary,
                                                 ),
                                               ),
                                             ),
@@ -526,14 +541,14 @@ class ProgressScreenState extends State<ProgressScreen> {
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.grey.shade900,
+                                          color: textColor,
                                         ),
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
                                         "Analyzing your last 7 days + negotiation style.",
                                         style: TextStyle(
-                                          color: Colors.grey.shade700,
+                                          color: subtitleColor,
                                           height: 1.25,
                                         ),
                                       ),
@@ -549,9 +564,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                                             return LinearProgressIndicator(
                                               minHeight: 10,
                                               value: v,
-                                              backgroundColor:
-                                                  Colors.grey.shade200,
-                                              color: Colors.teal,
+                                              backgroundColor: progressBg,
+                                              color: scheme.primary,
                                             );
                                           },
                                         ),
@@ -576,6 +590,22 @@ class ProgressScreenState extends State<ProgressScreen> {
                   : p.archetypeTitle;
 
               final isDark = Theme.of(context).brightness == Brightness.dark;
+              final scheme = Theme.of(context).colorScheme;
+              final cardBg =
+                  isDark ? scheme.surfaceContainerHighest : Colors.white;
+              final headerColor =
+                  isDark ? scheme.primary : Colors.teal.shade800;
+              final textColor = scheme.onSurface;
+              final subtitleColor = scheme.onSurfaceVariant;
+              final avatarBg =
+                  isDark ? scheme.surfaceContainerHigh : Colors.teal.shade50;
+              final avatarBorder = isLegendary
+                  ? Colors.amber.shade400
+                  : (isDark
+                      ? scheme.primary.withValues(alpha: 0.3)
+                      : Colors.teal.shade100);
+              final progressBg =
+                  isDark ? scheme.surfaceContainerHigh : Colors.grey.shade200;
 
               return SafeArea(
                 child: Center(
@@ -627,7 +657,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                               ],
                             ),
                             child: Material(
-                              color: Colors.white,
+                              color: cardBg,
                               borderRadius: BorderRadius.circular(22),
                               clipBehavior: Clip.antiAlias,
                               child: Padding(
@@ -643,7 +673,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                                             'IDENTITY UNLOCKED',
                                             style: TextStyle(
                                               letterSpacing: 1.2,
-                                              color: Colors.teal.shade800,
+                                              color: headerColor,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -652,7 +682,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                                           tooltip: 'Close',
                                           onPressed: () =>
                                               Navigator.pop(context),
-                                          icon: const Icon(Icons.close),
+                                          icon: Icon(Icons.close,
+                                              color: scheme.onSurfaceVariant),
                                         )
                                       ],
                                     ),
@@ -674,13 +705,11 @@ class ProgressScreenState extends State<ProgressScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color: Colors.teal.shade50,
+                                              color: avatarBg,
                                               borderRadius:
                                                   BorderRadius.circular(18),
                                               border: Border.all(
-                                                color: isLegendary
-                                                    ? Colors.amber.shade400
-                                                    : Colors.teal.shade100,
+                                                color: avatarBorder,
                                                 width: isLegendary ? 2 : 1,
                                               ),
                                             ),
@@ -715,31 +744,35 @@ class ProgressScreenState extends State<ProgressScreen> {
                                     const SizedBox(height: 14),
                                     Text(
                                       title,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
+                                        color: textColor,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
                                       p.description,
                                       style: TextStyle(
-                                        color: Colors.grey.shade800,
+                                        color: subtitleColor,
                                         height: 1.25,
                                       ),
                                     ),
                                     const SizedBox(height: 14),
                                     Row(
                                       children: [
-                                        const Icon(Icons.bolt, size: 18),
+                                        Icon(Icons.bolt,
+                                            size: 18, color: textColor),
                                         const SizedBox(width: 6),
-                                        const Text(
+                                        Text(
                                           'Power Level',
                                           style: TextStyle(
-                                              fontWeight: FontWeight.bold),
+                                              fontWeight: FontWeight.bold,
+                                              color: textColor),
                                         ),
                                         const Spacer(),
-                                        Text('${p.powerLevel}/100'),
+                                        Text('${p.powerLevel}/100',
+                                            style: TextStyle(color: textColor)),
                                       ],
                                     ),
                                     const SizedBox(height: 8),
@@ -755,9 +788,8 @@ class ProgressScreenState extends State<ProgressScreen> {
                                           return LinearProgressIndicator(
                                             minHeight: 10,
                                             value: value,
-                                            backgroundColor:
-                                                Colors.grey.shade200,
-                                            color: Colors.teal,
+                                            backgroundColor: progressBg,
+                                            color: scheme.primary,
                                           );
                                         },
                                       ),
@@ -1273,81 +1305,102 @@ class _WeeklyConsistencyCard extends StatelessWidget {
     return _GlassCard(
       softRaised: true,
       tint: _cOpacity(accent, 0.06),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: LinearGradient(
-                  colors: [
-                    _cOpacity(accent, 0.18),
-                    _cOpacity(accent, 0.08),
-                  ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 180;
+          final pad = isNarrow ? 14.0 : 16.0;
+          final ring = isNarrow ? 40.0 : 44.0;
+          final titleStyle = TextStyle(
+            color: _cOpacity(scheme.onSurface, 0.65),
+            fontWeight: FontWeight.w600,
+            fontSize: isNarrow ? 12.5 : null,
+            height: 1.15,
+          );
+
+          return Padding(
+            padding: EdgeInsets.all(pad),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      colors: [
+                        _cOpacity(accent, 0.18),
+                        _cOpacity(accent, 0.08),
+                      ],
+                    ),
+                    border: Border.all(color: _cOpacity(accent, 0.18)),
+                  ),
+                  child: Icon(Icons.show_chart, color: accent),
                 ),
-                border: Border.all(color: _cOpacity(accent, 0.18)),
-              ),
-              child: Icon(Icons.show_chart, color: accent),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Weekly Consistency',
-                    style: TextStyle(
-                      color: _cOpacity(scheme.onSurface, 0.65),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${percent.toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15.5,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(end: normalized),
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, _) {
-                return SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Stack(
-                    alignment: Alignment.center,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircularProgressIndicator(
-                        value: value,
-                        strokeWidth: 5,
-                        backgroundColor: _cOpacity(accent, 0.14),
-                        valueColor: AlwaysStoppedAnimation<Color>(accent),
-                      ),
+                      if (isNarrow)
+                        Text(
+                          'Weekly\nConsistency',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
+                        )
+                      else
+                        Text(
+                          'Weekly Consistency',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
+                        ),
+                      const SizedBox(height: 6),
                       Text(
-                        '${(value * 100).round()}%',
+                        '${percent.toStringAsFixed(0)}%',
                         style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: _cOpacity(scheme.onSurface, 0.72),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15.5,
+                          color: scheme.onSurface,
                         ),
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: normalized),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) {
+                    return SizedBox(
+                      width: ring,
+                      height: ring,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: value,
+                            strokeWidth: 5,
+                            backgroundColor: _cOpacity(accent, 0.14),
+                            valueColor: AlwaysStoppedAnimation<Color>(accent),
+                          ),
+                          Text(
+                            '${(value * 100).round()}%',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: _cOpacity(scheme.onSurface, 0.72),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

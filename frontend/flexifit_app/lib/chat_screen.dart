@@ -104,7 +104,8 @@ class ChatScreenState extends State<ChatScreen>
     // Require some context that implies full completion (today/goal/hari ini or a quantified unit).
     final hasContext =
         t.contains('today') || t.contains('hari ini') || t.contains('goal');
-    final hasUnits = RegExp(r'\b\d+\s*(km|kms|kilometer|steps|step|push\s*up|pushup|reps|rep|times|x|minutes|min|pages|page)\b')
+    final hasUnits = RegExp(
+            r'\b\d+\s*(km|kms|kilometer|steps|step|push\s*up|pushup|reps|rep|times|x|minutes|min|pages|page)\b')
         .hasMatch(t);
 
     return hasContext || hasUnits;
@@ -348,67 +349,82 @@ class ChatScreenState extends State<ChatScreen>
                 bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                 top: 8,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Voice input',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isListening
-                        ? 'Listening… speak now.'
-                        : 'Tap the mic, then tap Send.',
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.teal.shade200),
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.teal.shade50,
+              child: Builder(builder: (context) {
+                final scheme = Theme.of(context).colorScheme;
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Voice input',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
                     ),
-                    child: Text(
-                      recognized.isEmpty ? '(no speech yet)' : recognized,
-                      style: const TextStyle(fontSize: 16),
+                    const SizedBox(height: 8),
+                    Text(
+                      isListening
+                          ? 'Listening… speak now.'
+                          : 'Tap the mic, then tap Send.',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: toggle,
-                        icon: Icon(isListening ? Icons.stop : Icons.mic),
-                        tooltip: isListening ? 'Stop' : 'Start',
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isDark
+                              ? scheme.primary.withValues(alpha: 0.4)
+                              : Colors.teal.shade200,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        color: isDark
+                            ? scheme.surfaceContainerHighest
+                            : Colors.teal.shade50,
                       ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () async {
-                          await stop();
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Cancel'),
+                      child: Text(
+                        recognized.isEmpty ? '(no speech yet)' : recognized,
+                        style: TextStyle(fontSize: 16, color: scheme.onSurface),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: recognized.trim().isEmpty
-                            ? null
-                            : () async {
-                                await stop();
-                                if (!context.mounted) return;
-                                Navigator.pop(context);
-                                sendText(recognized);
-                              },
-                        child: const Text('Send'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        IconButton.filledTonal(
+                          onPressed: toggle,
+                          icon: Icon(isListening ? Icons.stop : Icons.mic),
+                          tooltip: isListening ? 'Stop' : 'Start',
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () async {
+                            await stop();
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: recognized.trim().isEmpty
+                              ? null
+                              : () async {
+                                  await stop();
+                                  if (!context.mounted) return;
+                                  Navigator.pop(context);
+                                  sendText(recognized);
+                                },
+                          child: const Text('Send'),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }),
             );
           },
         );
@@ -560,7 +576,6 @@ class ChatScreenState extends State<ChatScreen>
 
     await _persistChatHistory();
 
-
     try {
       if (_looksLikeGoalCompletionClaim(message.text)) {
         final alreadyDone = await ProgressStore.isDoneToday();
@@ -571,9 +586,7 @@ class ChatScreenState extends State<ChatScreen>
           });
         }
       }
-    } catch (_) {
-      // Never block chat flow on DONE detection.
-    }
+    } catch (_) {}
 
     _showTypingIndicator();
 
@@ -603,7 +616,8 @@ class ChatScreenState extends State<ChatScreen>
 
     final responseText = result.response;
 
-    final dealMade = (result.dealMade == true) || responseText.contains('[DEAL_MADE]');
+    final dealMade =
+        (result.dealMade == true) || responseText.contains('[DEAL_MADE]');
     final dealLabel = (result.dealLabel ?? '').trim();
 
     _stopLoadingAnimation();
@@ -1096,41 +1110,104 @@ class ChatScreenState extends State<ChatScreen>
                               ),
                             ],
                           ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.handshake,
-                                  color: Colors.green.shade700),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  "Ready to lock in ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}? Tap Accept Deal to mark DONE today.",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green.shade800,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 360;
+                              final message =
+                                  "Ready to lock in ${_currentAgreedHabit.trim().isEmpty ? "today's micro-habit" : _currentAgreedHabit}? Tap Accept Deal to mark DONE today.";
+
+                              void dismiss() {
+                                setState(() {
+                                  _showActionButtons = false;
+                                });
+                              }
+
+                              if (!isNarrow) {
+                                return Row(
+                                  children: [
+                                    Icon(Icons.handshake,
+                                        color: Colors.green.shade700),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        message,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Dismiss',
+                                      onPressed: dismiss,
+                                      icon: Icon(Icons.close,
+                                          color: Colors.green.shade700),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    ElevatedButton.icon(
+                                      icon: const Icon(Icons.check_circle),
+                                      label: const Text("Accept Deal"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: _markAsDone,
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.handshake,
+                                          color: Colors.green.shade700),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Deal ready',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Dismiss',
+                                        onPressed: dismiss,
+                                        icon: Icon(Icons.close,
+                                            color: Colors.green.shade700),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Dismiss',
-                                onPressed: () {
-                                  setState(() {
-                                    _showActionButtons = false;
-                                  });
-                                },
-                                icon: Icon(Icons.close,
-                                    color: Colors.green.shade700),
-                              ),
-                              const SizedBox(width: 6),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.check_circle),
-                                label: const Text("Accept Deal"),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                ),
-                                onPressed: _markAsDone,
-                              ),
-                            ],
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    message,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.check_circle),
+                                      label: const Text("Accept Deal"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: _markAsDone,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       if (_isLoading)
@@ -1236,7 +1313,7 @@ class ChatScreenState extends State<ChatScreen>
       appBar: AppBar(
         title: Row(
           children: [
-            _LogoMark(assetPath: _logoAssetPath, size: 32),
+            _LogoMark(assetPath: _logoAssetPath, size: 35),
             const SizedBox(width: 10),
             const Text("FlexiFit"),
           ],
