@@ -52,3 +52,10 @@ If your build supports it, you can also toggle local mode:
 ```bash
 flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
 ```
+
+## Daily Nudge (Android notifications)
+
+Notes for reliable scheduling:
+- Android 13+: notifications require user permission (prompt will appear).
+- Android 12+: exact alarm permission may be required for precise time.
+- Some devices aggressively delay background work (Doze/OEM battery optimization). If nudges don’t fire, set battery mode for the app to “Unrestricted”.

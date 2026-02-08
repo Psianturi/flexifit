@@ -84,9 +84,15 @@ flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
 - Check API key in `.env`
 - Test endpoint: `http://localhost:8000/docs`
 
+
 ### Frontend Issues
 - Ensure `baseUrl` matches environment
 - Check Flutter console for HTTP errors
+
+### Daily Nudge (Android notifications)
+- Android 13+: user must allow notification permission.
+- Android 12+: exact alarm permission may be required for precise scheduling.
+- Some devices (Doze/OEM battery optimization) may delay scheduled notifications; set the app battery mode to “Unrestricted” if needed.
 
 ##  Deployment Ready
 
@@ -97,10 +103,13 @@ flutter run -d <device-id> --dart-define=USE_LOCAL_API=true
 4. Deploy using the monorepo Dockerfile setup (details in [backend/README.md](backend/README.md))
 5. Update Flutter `baseUrl` with the Railway public URL
 
+Backend Swagger docs (Railway): https://flexifit-production.up.railway.app/docs
+
 ### Frontend → APK
 ```bash
 flutter build apk --release
 ```
+
 
 ### Frontend (Flutter Web) → Vercel (GitHub Actions CI/CD)
 

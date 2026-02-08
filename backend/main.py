@@ -356,7 +356,7 @@ logger.info(f"Using Gemini model: {GEMINI_MODEL}")
 
 def _generate_with_retry(prompt, *, request_options=None, max_retries=3):
     """Wrap model.generate_content with exponential back-off for 429 errors."""
-    opts = request_options or {"timeout": 25}
+    opts = request_options or {"timeout": 26}
     for attempt in range(max_retries + 1):
         try:
             response = model.generate_content(prompt, request_options=opts)
@@ -552,7 +552,7 @@ def call_gemini_negotiator(user_msg: str, goal: str, history: List[ChatMessage])
 
         response = _generate_with_retry(
             prompt,
-            request_options={"timeout": 20},
+            request_options={"timeout": 24},
         )
 
         text = (response.text or "").strip()

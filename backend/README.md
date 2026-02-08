@@ -18,6 +18,7 @@ This backend is the “brain” for FlexiFit.
 Create `backend/.env` locally (never commit it):
 
 - `GOOGLE_API_KEY` (required) — Gemini API key
+- `GEMINI_MODEL` (optional) — override Gemini model id (default auto-selects)
 - `OPIK_API_KEY` (recommended) — Opik API key
 - `PORT` (optional) — default `8000`
 - `CORS_ORIGINS` (optional) — default `*` (comma-separated if multiple)
@@ -56,6 +57,15 @@ python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 Then open:
 - `http://localhost:8000/docs`
 - `http://localhost:8000/health`
+
+## Gemini Model Selection
+
+By default the backend tries, in order:
+- `gemini-3-flash-preview`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+
+You can override with `GEMINI_MODEL` (example: `gemini-2.5-flash`).
 
 ## Opik Notes (Important)
 
@@ -116,6 +126,7 @@ If Railway still doesn’t pick it up, set in Railway Variables:
 ### 4) Confirm deploy
 After deployment:
 - Visit `/health` and `/docs`
+- Production docs (Railway): https://flexifit-production.up.railway.app/docs
 - Ensure the service is “Exposed” publicly (Railway networking settings)
 
 ## Troubleshooting
@@ -138,3 +149,13 @@ Fix:
 ### Flutter can’t reach backend
 - Use the Railway public URL in Flutter `baseUrl`
 - Android emulator uses `10.0.2.2` only for local dev, not Railway
+
+### 429 `ResourceExhausted` (Gemini rate limit)
+If Gemini rate-limits requests, the backend will:
+- retry a few times with exponential backoff, then
+- return **HTTP 429** with a short user-friendly message.
+
+If it happens frequently:
+- reduce request volume / concurrency,
+- shorten prompts / history,
+- or switch to a lighter model via `GEMINI_MODEL`.

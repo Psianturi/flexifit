@@ -87,7 +87,7 @@ class ApiService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 28));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -120,7 +120,6 @@ class ApiService {
         );
       }
 
-      // Demo safety fallbacks with DEAL_MADE integration
       if (message.toLowerCase().contains('tired') ||
           message.toLowerCase().contains('exhausted')) {
         return const ChatResult(
